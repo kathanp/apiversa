@@ -30,6 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -262,6 +263,10 @@ final class ApiversaUsageRecorder {
         String clientId = client instanceof String text && !text.isBlank() ? text : null;
         usages.orderedStream().forEach(usage -> usage.record(version, clientId, ids));
     }
+
+    static void applyDeprecation(HttpServletResponse response, Engine.Bundle bundle, String version) {
+        for (String[] header : Engine.deprecationHeaders(bundle, version)) response.setHeader(header[0], header[1]);
+    }
 }
 
 final class ApiversaFilter extends OncePerRequestFilter {
@@ -284,6 +289,7 @@ final class ApiversaFilter extends OncePerRequestFilter {
             try {
                 String version = ApiversaMvc.resolve(bundle, properties, request, host);
                 wrapped.setAttribute(ApiversaMvc.VERSION, version);
+                ApiversaUsageRecorder.applyDeprecation(response, bundle, version);
                 Engine.Result result = ApiversaMvc.upgrade(bundle, properties, request, version);
                 wrapped.rewrite(result.path(), result.query());
                 wrapped.setAttribute(ApiversaMvc.UP, Boolean.TRUE);
@@ -325,6 +331,7 @@ final class ApiversaInterceptor implements HandlerInterceptor {
                 if (result.trace() != null) request.setAttribute(ApiversaMvc.TRACE, result.trace());
             }
             ApiversaUsageRecorder.count(request, usages, bundle, String.valueOf(request.getAttribute(ApiversaMvc.VERSION)));
+            ApiversaUsageRecorder.applyDeprecation(response, bundle, String.valueOf(request.getAttribute(ApiversaMvc.VERSION)));
             return true;
         } catch (ApiversaException exception) {
             ApiversaMvc.writeError(response, exception);
@@ -421,6 +428,17 @@ final class ApiversaAdvice implements RequestBodyAdvice, ResponseBodyAdvice<Obje
         HttpHeaders headers = new HttpHeaders();
         for (String[] header : exception.headers()) headers.add(header[0], header[1]);
         return new ResponseEntity<>(exception.envelope(), headers, status);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    ResponseEntity<Map<String, Object>> onInvalid(MethodArgumentNotValidException exception) {
+        HttpServletRequest request = current();
+        String version = bundle.head();
+        if (request != null && request.getAttribute(ApiversaMvc.VERSION) instanceof String pinned) version = pinned;
+        String schema = ApiversaMvc.schema(exception.getParameter(), ApiversaRequest.class);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("errors", ApiversaValidation.errors(bundle, version, schema == null ? "" : schema, exception.getBindingResult().getFieldErrors()));
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 
     private boolean bodyWork(String version, String direction) {

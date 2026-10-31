@@ -9,6 +9,12 @@ type ZodType = {
  * Build an apiversa registry from Zod objects.
  * Field order is Zod object key order. A nested field whose schema is one of `schemas` is linked by name.
  */
+/** A converter whose arguments are the generated per-version types. */
+export type VersionConverter<OldBody, HeadBody> = {
+  up: (body: OldBody) => HeadBody;
+  down: (body: HeadBody) => OldBody;
+};
+
 export function defineSchemas(schemas: Record<string, ZodType>): Registry {
   const registry: Registry = {};
   for (const [name, schema] of Object.entries(schemas)) {

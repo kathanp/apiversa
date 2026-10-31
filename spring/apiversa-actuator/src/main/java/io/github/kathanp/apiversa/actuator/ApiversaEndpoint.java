@@ -29,7 +29,6 @@ public class ApiversaEndpoint {
         Map<String, Long> usage = counts.requestsByVersion();
         List<Map<String, Object>> versions = new ArrayList<>();
         List<Map<String, Object>> deprecations = new ArrayList<>();
-        List<String> idle = new ArrayList<>();
         for (Engine.VersionInfo info : bundle.versionInfo()) {
             long requests = usage.getOrDefault(info.date(), 0L);
             Map<String, Object> row = new LinkedHashMap<>();
@@ -39,25 +38,12 @@ public class ApiversaEndpoint {
             row.put("requests", requests);
             versions.add(row);
             if (info.deprecated()) deprecations.add(row);
-            if (requests == 0L) idle.add(info.date());
         }
-        List<String> safeChanges = new ArrayList<>();
-        for (Engine.Change change : bundle.changes()) {
-            boolean used = false;
-            for (Engine.VersionInfo info : bundle.versionInfo()) {
-                if (info.date().compareTo(change.version()) < 0 && usage.getOrDefault(info.date(), 0L) > 0L) used = true;
-            }
-            if (!used) safeChanges.add(change.version() + "." + change.id());
-        }
-        Map<String, Object> safe = new LinkedHashMap<>();
-        safe.put("versions", idle);
-        safe.put("changes", safeChanges);
-        safe.put("window", "process");
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("versions", versions);
         body.put("deprecations", deprecations);
         body.put("usage", usage);
-        body.put("safeToRemove", safe);
+        body.put("safeToRemove", counts.safeToRemove(bundle));
         return body;
     }
 }

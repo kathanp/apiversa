@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -206,6 +207,163 @@ public final class Engine {
             }
         }
         return finish(request, direction, steps, body, path, query, headers, status, legacy, parsed);
+    }
+
+    /** The payload in `version`'s shape. Same `down` chain as a response. */
+    public static Object downgradeEvent(Bundle bundle, Object payload, String schema, String version) {
+        String resolved = resolve(bundle, java.util.Map.of("Api-Version", java.util.List.of(version)), "Api-Version", null, null);
+        Result result = execute(bundle, new Request(schema, resolved, payload, null, null, java.util.List.of(), java.util.List.of(), null, false, null, false), "down");
+        return result.body();
+    }
+
+    /** Downgrade using the version pinned for this subscriber. A missing pin is AV-E002. */
+    public static Object downgradeForSubscriber(Bundle bundle, Object payload, String schema, PinStore pins, String subscriberId) {
+        if (pins == null || subscriberId == null || subscriberId.isBlank()) throw ApiversaException.fail("AV-E002", "down", bundle.dates);
+        String pinned = pins.get(subscriberId);
+        if (pinned == null || pinned.isBlank()) throw ApiversaException.fail("AV-E002", "down", bundle.dates);
+        return downgradeEvent(bundle, payload, schema, pinned);
+    }
+
+    /** RFC 9745 Deprecation, RFC 8594 Sunset, and a link to the upgrade guide. Empty when the version is current. */
+    public static List<String[]> deprecationHeaders(Bundle bundle, String version) {
+        VersionInfo info = null;
+        for (VersionInfo item : bundle.versionInfo) if (item.date().equals(version)) info = item;
+        if (info == null || !info.deprecated()) return List.of();
+        List<String[]> headers = new ArrayList<>();
+        long epoch = LocalDate.parse(info.date()).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        headers.add(new String[] {"Deprecation", "@" + epoch});
+        if (info.sunset() != null && !info.sunset().isBlank()) {
+            headers.add(new String[] {"Sunset", DateTimeFormatter.RFC_1123_DATE_TIME.format(LocalDate.parse(info.sunset()).atStartOfDay(ZoneOffset.UTC))});
+        }
+        headers.add(new String[] {"Link", "</apiversa/upgrade>; rel=\"deprecation\""});
+        return headers;
+    }
+
+    /**
+     * Changes between the client's pin and {@code toDate}, with the sample in both shapes.
+     * {@code endpoints} are the paths this client has called.
+     */
+    public static Map<String, Object> previewUpgrade(Bundle bundle, String pin, String toDate, List<String> endpoints, Object sample, String schema) {
+        String resolved = resolve(bundle, Map.of("Api-Version", List.of(toDate)), "Api-Version", null, null);
+        List<Map<String, Object>> changes = new ArrayList<>();
+        for (Change change : bundle.changes) {
+            if (change.version.compareTo(pin) > 0 && change.version.compareTo(resolved) <= 0) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", change.version + "." + change.id);
+                row.put("description", change.description);
+                row.put("before", downgradeEvent(bundle, sample, schema, pin));
+                row.put("after", resolved.equals(bundle.head) ? sample : downgradeEvent(bundle, sample, schema, resolved));
+                changes.add(row);
+            }
+        }
+        List<String> paths = endpoints == null || endpoints.isEmpty() ? List.of("*") : endpoints;
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (String path : paths) {
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put("path", path);
+            group.put("changes", changes);
+            groups.add(group);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("from", pin);
+        body.put("to", resolved);
+        body.put("endpoints", groups);
+        return body;
+    }
+
+    /** Move a pin forward. A backwards move is refused unless {@code allowDowngrade} is true. {@code dryRun} does not write. */
+    public static String upgradePin(Bundle bundle, PinStore pins, String clientId, String toDate, boolean dryRun, boolean allowDowngrade) {
+        if (pins == null || clientId == null || clientId.isBlank()) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
+        String pin = pins.get(clientId);
+        if (pin == null || pin.isBlank()) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
+        String resolved = resolve(bundle, Map.of("Api-Version", List.of(toDate)), "Api-Version", null, null);
+        if (resolved.compareTo(pin) < 0 && !allowDowngrade) throw new IllegalStateException("Refusing to move a pin backwards without allowDowngrade.");
+        if (!dryRun) pins.set(clientId, resolved);
+        return resolved;
+    }
+
+    /**
+     * The field name an old client understands.
+     * A field added after that version is {@code _head}, and {@code headPath} keeps the head path.
+     */
+    public static ClientField clientField(Bundle bundle, String version, String schema, String headPath) {
+        String path = headPath;
+        boolean introduced = false;
+        java.util.List<Change> newer = new java.util.ArrayList<>();
+        for (Change change : bundle.changes) if (change.version.compareTo(version) > 0) newer.add(change);
+        newer.sort((left, right) -> {
+            int byDate = right.version.compareTo(left.version);
+            return byDate != 0 ? byDate : right.id.compareTo(left.id);
+        });
+        for (Change change : newer) {
+            java.util.List<java.util.Map<String, Object>> ops = new java.util.ArrayList<>(change.ops);
+            java.util.Collections.reverse(ops);
+            for (java.util.Map<String, Object> op : ops) {
+                Object declared = op.get("schema");
+                if (declared != null && schema != null && !schema.equals(String.valueOf(declared))) continue;
+                String kind = String.valueOf(op.get("op"));
+                if ("field.rename".equals(kind) || "field.move".equals(kind)) path = replacePath(path, String.valueOf(op.get("to")), String.valueOf(op.get("from")));
+                else if ("field.add".equals(kind) && covers(path, String.valueOf(op.get("path")))) introduced = true;
+            }
+        }
+        return introduced ? new ClientField("_head", headPath) : new ClientField(path, null);
+    }
+
+    public record ClientField(String field, String headPath) {}
+
+    private static String replacePath(String actual, String to, String from) {
+        java.util.List<Seg> actualSegs = splitPath(actual);
+        java.util.List<Seg> toSegs = splitPath(to);
+        if (toSegs.isEmpty() || actualSegs.size() < toSegs.size()) return actual;
+        for (int i = 0; i < toSegs.size(); i++) if (!actualSegs.get(i).name.equals(toSegs.get(i).name)) return actual;
+        java.util.List<Seg> fromSegs = splitPath(from);
+        java.util.List<Seg> out = new java.util.ArrayList<>();
+        for (int i = 0; i < fromSegs.size(); i++) {
+            String index = fromSegs.get(i).index;
+            if (i < actualSegs.size() && actualSegs.get(i).index != null && !"[]".equals(actualSegs.get(i).index)) index = actualSegs.get(i).index;
+            out.add(new Seg(fromSegs.get(i).name, index));
+        }
+        for (int i = toSegs.size(); i < actualSegs.size(); i++) out.add(actualSegs.get(i));
+        return joinPath(out);
+    }
+
+    private static boolean covers(String actual, String added) {
+        java.util.List<Seg> actualSegs = splitPath(actual);
+        java.util.List<Seg> addedSegs = splitPath(added);
+        if (addedSegs.isEmpty() || actualSegs.size() < addedSegs.size()) return false;
+        for (int i = 0; i < addedSegs.size(); i++) if (!actualSegs.get(i).name.equals(addedSegs.get(i).name)) return false;
+        return true;
+    }
+
+    private static java.util.List<Seg> splitPath(String path) {
+        java.util.List<Seg> segs = new java.util.ArrayList<>();
+        if (path == null || path.isEmpty() || "null".equals(path)) return segs;
+        for (String part : path.split("\\.")) {
+            int bracket = part.indexOf('[');
+            if (bracket < 0) segs.add(new Seg(part, null));
+            else segs.add(new Seg(part.substring(0, bracket), part.substring(bracket)));
+        }
+        return segs;
+    }
+
+    private static String joinPath(java.util.List<Seg> segs) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < segs.size(); i++) {
+            if (i > 0) out.append('.');
+            out.append(segs.get(i).name);
+            if (segs.get(i).index != null) out.append(segs.get(i).index);
+        }
+        return out.toString();
+    }
+
+    private static final class Seg {
+        private final String name;
+        private final String index;
+
+        private Seg(String name, String index) {
+            this.name = name;
+            this.index = index;
+        }
     }
 
     public static String resolve(Bundle bundle, Map<String, List<String>> headers, String headerName, String resolved, String clientId) {

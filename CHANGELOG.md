@@ -63,7 +63,31 @@ One section per track and version. The agent adds one line per finished roadmap 
 - TEST-08 Fuzz suite
 - DBG-04 Doctor
 
+## node 0.3.0 (unreleased)
+
+- TYPE-02 Generated per-version schemas
+- TYPE-03 Typed converters
+- TYPE-04 Round-trip property tests
+
+## node 0.4.0 (unreleased)
+
+- TEST-01 Breaking-change gate
+- TEST-04 Pull-request summary
+- TEST-06 Draft suggestion
+
 ## spring 0.2.0 (unreleased)
 
 - SPR-13 Actuator endpoint
 - SPR-08 Micrometer
+
+## spring 0.3.0 (unreleased)
+
+- SPR-10 Bean Validation errors
+- EVT-01 Downgrade an outgoing event
+- EVT-02 Subscriber pins
+
+## spring 0.4.0 (unreleased)
+
+- LIFE-01 Deprecation and Sunset headers
+- LIFE-03 Safe-to-remove report
+- LIFE-06 Pin upgrade with preview

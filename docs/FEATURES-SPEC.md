@@ -763,51 +763,51 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 
 ## H1. Node track (16 versions)
 
-Each version has one theme. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar.
+Each version has one theme. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar. `[x]` after an ID means that ID is implemented and its tests passed. It does not mean the package is published.
 
 ### node 0.1.0
 Theme: usable core on Express and Fastify.
-- **CORE-01** Version bundle — Evidence: cadwyn
-- **CORE-02** Version resolution — Evidence: stripe
-- **CORE-03** Change-file loader — Evidence: cadwyn
-- **CORE-04** Conversion chains — Evidence: cadwyn
-- **CORE-05** Declarative operations — Evidence: cadwyn
-- **CORE-06** Paths — Evidence: cadwyn
-- **CORE-07** Schema binding — Evidence: cadwyn
-- **CORE-09** Version errors — Evidence: stripe
-- **CORE-12** Limits — Evidence: safety
-- **TYPE-01** Head schemas (Zod) — Evidence: cadwyn
-- **FW-01** Express adapter — Evidence: adoption
-- **FW-02** Fastify adapter — Evidence: adoption
-- **ADOPT-02** Per-route opt-in — Evidence: adoption
-- **ADOPT-04** Init — Evidence: adoption
-- **DBG-01** Trace header — Evidence: adoption
-- **PERF-01** Head fast path — Evidence: safety
-- **PERF-02** Precompiled plans — Evidence: safety
-- **TEST-05** Test helpers — Evidence: adoption
-- **SHR-01** Change-file JSON Schema — Evidence: adoption
-- **SHR-02** Conformance suite (core ops) — Evidence: adoption
+- **CORE-01** [x] Version bundle — Evidence: cadwyn
+- **CORE-02** [x] Version resolution — Evidence: stripe
+- **CORE-03** [x] Change-file loader — Evidence: cadwyn
+- **CORE-04** [x] Conversion chains — Evidence: cadwyn
+- **CORE-05** [x] Declarative operations — Evidence: cadwyn
+- **CORE-06** [x] Paths — Evidence: cadwyn
+- **CORE-07** [x] Schema binding — Evidence: cadwyn
+- **CORE-09** [x] Version errors — Evidence: stripe
+- **CORE-12** [x] Limits — Evidence: safety
+- **TYPE-01** [x] Head schemas (Zod) — Evidence: cadwyn
+- **FW-01** [x] Express adapter — Evidence: adoption
+- **FW-02** [x] Fastify adapter — Evidence: adoption
+- **ADOPT-02** [x] Per-route opt-in — Evidence: adoption
+- **ADOPT-04** [x] Init — Evidence: adoption
+- **DBG-01** [x] Trace header — Evidence: adoption
+- **PERF-01** [x] Head fast path — Evidence: safety
+- **PERF-02** [x] Precompiled plans — Evidence: safety
+- **TEST-05** [x] Test helpers — Evidence: adoption
+- **SHR-01** [x] Change-file JSON Schema — Evidence: adoption
+- **SHR-02** [x] Conformance suite (core ops) — Evidence: adoption
 
 ### node 0.2.0
 Theme: safe to run in production.
-- **CORE-08** Error bodies — Evidence: stripe
-- **CORE-10** Released versions are frozen — Evidence: safety
-- **CORE-11** Purity check — Evidence: safety
-- **CORE-13** Query parameters — Evidence: stripe
-- **TEST-08** Fuzz suite — Evidence: safety
-- **DBG-04** Doctor — Evidence: adoption
+- **CORE-08** [x] Error bodies — Evidence: stripe
+- **CORE-10** [x] Released versions are frozen — Evidence: safety
+- **CORE-11** [x] Purity check — Evidence: safety
+- **CORE-13** [x] Query parameters — Evidence: stripe
+- **TEST-08** [x] Fuzz suite — Evidence: safety
+- **DBG-04** [x] Doctor — Evidence: adoption
 
 ### node 0.3.0
 Theme: types for every version.
-- **TYPE-02** Generated per-version schemas — Evidence: cadwyn
-- **TYPE-03** Typed converters — Evidence: adoption
-- **TYPE-04** Round-trip property tests — Evidence: safety
+- **TYPE-02** [x] Generated per-version schemas — Evidence: cadwyn
+- **TYPE-03** [x] Typed converters — Evidence: adoption
+- **TYPE-04** [x] Round-trip property tests — Evidence: safety
 
 ### node 0.4.0
 Theme: the CI gate.
-- **TEST-01** Breaking-change gate — Evidence: adoption
-- **TEST-04** Pull-request summary — Evidence: adoption
-- **TEST-06** Draft suggestion — Evidence: adoption
+- **TEST-01** [x] Breaking-change gate — Evidence: adoption
+- **TEST-04** [x] Pull-request summary — Evidence: adoption
+- **TEST-06** [x] Draft suggestion — Evidence: adoption
 
 ### node 0.5.0
 Theme: docs for every version.
@@ -886,49 +886,49 @@ Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later 
 
 ### spring 0.1.0
 Theme: usable core on Spring MVC, with docs and the CI gate. Same behavior as node 0.1.0. FW-01 and FW-02 are SPR-01 and SPR-04. TYPE-01's ordered fields are the schema registry. TEST-05's helpers are SPR-09.
-- **SPR-01** Platform — Evidence: spring7-gap
-- **SPR-02** Same change files — Evidence: spring7-gap
-- **SPR-03** Version resolution — Evidence: spring7-gap
-- **SPR-04** Conversion — Evidence: spring7-gap
-- **SPR-05** OpenAPI per version — Evidence: cadwyn
-- **SPR-09** Test support — Evidence: adoption
-- **SPR-14** Maven plugin — Evidence: adoption
-- **CORE-01** Version bundle — Evidence: cadwyn
-- **CORE-02** Version resolution — Evidence: stripe
-- **CORE-03** Change-file loader — Evidence: cadwyn
-- **CORE-04** Conversion chains — Evidence: cadwyn
-- **CORE-05** Declarative operations — Evidence: cadwyn
-- **CORE-06** Paths — Evidence: cadwyn
-- **CORE-07** Schema binding — Evidence: cadwyn
-- **CORE-08** Error bodies — Evidence: stripe
-- **CORE-09** Version errors — Evidence: stripe
-- **CORE-12** Limits — Evidence: safety
-- **CORE-13** Query parameters — Evidence: stripe
-- **ADOPT-02** Per-route opt-in — Evidence: adoption
-- **ADOPT-04** Init — Evidence: adoption
-- **DBG-01** Trace header — Evidence: adoption
-- **PERF-01** Head fast path — Evidence: safety
-- **PERF-02** Precompiled plans — Evidence: safety
-- **STR-01** Lists and pagination — Evidence: cadwyn
-- **SHR-01** Change-file JSON Schema — Evidence: adoption
-- **SHR-02** Conformance suite (core ops) — Evidence: adoption
+- **SPR-01** [x] Platform — Evidence: spring7-gap
+- **SPR-02** [x] Same change files — Evidence: spring7-gap
+- **SPR-03** [x] Version resolution — Evidence: spring7-gap
+- **SPR-04** [x] Conversion — Evidence: spring7-gap
+- **SPR-05** [x] OpenAPI per version — Evidence: cadwyn
+- **SPR-09** [x] Test support — Evidence: adoption
+- **SPR-14** [x] Maven plugin — Evidence: adoption
+- **CORE-01** [x] Version bundle — Evidence: cadwyn
+- **CORE-02** [x] Version resolution — Evidence: stripe
+- **CORE-03** [x] Change-file loader — Evidence: cadwyn
+- **CORE-04** [x] Conversion chains — Evidence: cadwyn
+- **CORE-05** [x] Declarative operations — Evidence: cadwyn
+- **CORE-06** [x] Paths — Evidence: cadwyn
+- **CORE-07** [x] Schema binding — Evidence: cadwyn
+- **CORE-08** [x] Error bodies — Evidence: stripe
+- **CORE-09** [x] Version errors — Evidence: stripe
+- **CORE-12** [x] Limits — Evidence: safety
+- **CORE-13** [x] Query parameters — Evidence: stripe
+- **ADOPT-02** [x] Per-route opt-in — Evidence: adoption
+- **ADOPT-04** [x] Init — Evidence: adoption
+- **DBG-01** [x] Trace header — Evidence: adoption
+- **PERF-01** [x] Head fast path — Evidence: safety
+- **PERF-02** [x] Precompiled plans — Evidence: safety
+- **STR-01** [x] Lists and pagination — Evidence: cadwyn
+- **SHR-01** [x] Change-file JSON Schema — Evidence: adoption
+- **SHR-02** [x] Conformance suite (core ops) — Evidence: adoption
 
 ### spring 0.2.0
 Theme: operations.
-- **SPR-13** Actuator endpoint — Evidence: adoption
-- **SPR-08** Micrometer — Evidence: adoption
+- **SPR-13** [x] Actuator endpoint — Evidence: adoption
+- **SPR-08** [x] Micrometer — Evidence: adoption
 
 ### spring 0.3.0
 Theme: correct errors and webhooks.
-- **SPR-10** Bean Validation errors — Evidence: safety
-- **EVT-01** Downgrade an outgoing event — Evidence: stripe
-- **EVT-02** Subscriber pins — Evidence: stripe
+- **SPR-10** [x] Bean Validation errors — Evidence: safety
+- **EVT-01** [x] Downgrade an outgoing event — Evidence: stripe
+- **EVT-02** [x] Subscriber pins — Evidence: stripe
 
 ### spring 0.4.0
 Theme: lifecycle.
-- **LIFE-01** Deprecation and Sunset headers — Evidence: rfc
-- **LIFE-03** Safe-to-remove report — Evidence: adoption
-- **LIFE-06** Pin upgrade with preview — Evidence: stripe
+- **LIFE-01** [x] Deprecation and Sunset headers — Evidence: rfc
+- **LIFE-03** [x] Safe-to-remove report — Evidence: adoption
+- **LIFE-06** [x] Pin upgrade with preview — Evidence: stripe
 
 ### spring 0.5.0
 Theme: reactive.

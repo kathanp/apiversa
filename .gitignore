@@ -8,4 +8,5 @@ reports/
 .autopilot/
 *.tgz
 *.tsbuildinfo
+.typecheck-*
 .DS_Store
