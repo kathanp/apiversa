@@ -7,4 +7,5 @@ reports/
 .stryker-tmp/
 .autopilot/
 *.tgz
+*.tsbuildinfo
 .DS_Store
