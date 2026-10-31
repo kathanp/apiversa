@@ -31,6 +31,11 @@ export function writeGenerated(dir: string, bundle: Bundle, head: Record<string,
   return written;
 }
 
+/** Fields each schema had on `date`, rewound from the head list. */
+export function schemaFieldsAt(head: Record<string, HeadField[]>, bundle: Bundle, date: string): Record<string, HeadField[]> {
+  return shapesAt(head, bundle, date);
+}
+
 function shapesAt(head: Record<string, HeadField[]>, bundle: Bundle, date: string): Record<string, HeadField[]> {
   const schemas: Record<string, HeadField[]> = {};
   for (const [name, fields] of Object.entries(head)) schemas[name] = fields.map((field) => ({ ...field }));

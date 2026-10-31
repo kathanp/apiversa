@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeChangelog } from './changelog.js';
 import { checkBundle } from './check.js';
 import { doctor } from './doctor.js';
 import { generate } from './generate.js';
 import { init } from './init.js';
 import { lockFiles } from './lock.js';
+import { writeOpenApi } from './openapi.js';
 
-/** `apiversa init|lock|doctor|generate|check`. Returns the process status. */
+/** `apiversa init|lock|doctor|generate|check|openapi|changelog`. Returns the process status. */
 export function runCli(argv: string[], cwd = process.cwd()): number {
   const command = argv[2];
   const rest = argv.slice(3);
@@ -40,6 +42,27 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
       return 1;
     }
   }
+  if (command === 'openapi') {
+    try {
+      const written = writeOpenApi(dir);
+      for (const file of written) process.stdout.write(`wrote ${file}\n`);
+      return 0;
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : 'openapi failed'}\n`);
+      return 1;
+    }
+  }
+  if (command === 'changelog') {
+    try {
+      const format = rest.includes('--format') && rest[rest.indexOf('--format') + 1] === 'json' ? 'json' : 'markdown';
+      const result = writeChangelog(dir);
+      process.stdout.write(format === 'json' ? `${JSON.stringify(result.json)}\n` : `${result.markdown}\n`);
+      return 0;
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : 'changelog failed'}\n`);
+      return 1;
+    }
+  }
   if (command === 'doctor') {
     const problems = doctor(dir);
     if (problems.length === 0) {
@@ -49,7 +72,7 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
     for (const problem of problems) process.stderr.write(`${problem.message} Fix: ${problem.fix}\n`);
     return 1;
   }
-  process.stderr.write('usage: apiversa init [directory] | apiversa lock [api-versions] | apiversa doctor [api-versions] | apiversa generate [api-versions] | apiversa check [api-versions] [--format markdown] [--suggest]\n');
+  process.stderr.write('usage: apiversa init [directory] | apiversa lock [api-versions] | apiversa doctor [api-versions] | apiversa generate [api-versions] | apiversa check [api-versions] [--format markdown] [--suggest] | apiversa openapi [api-versions] | apiversa changelog [api-versions] [--format json]\n');
   return 1;
 }
 

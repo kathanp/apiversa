@@ -8,5 +8,7 @@ export type { Converter, HeaderPair, PinStore, QueryPair } from './model.js';
 export type { Registry, SchemaDef, SchemaField } from './json/parse.js';
 export { buildBundle, loadBundle } from './bundle/load.js';
 export { init } from './cli/init.js';
-export { generate, writeGenerated, type HeadField } from './cli/generate.js';
+export { generate, schemaFieldsAt, writeGenerated, type HeadField } from './cli/generate.js';
+export { openApiVersions, versionPicker, writeOpenApi, type OpenApiDocument, type VersionPicker } from './cli/openapi.js';
+export { changelogBundle, writeChangelog, type ChangelogDocument } from './cli/changelog.js';
 export { toMatchVersion } from './testing.js';
