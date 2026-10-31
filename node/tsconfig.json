@@ -4,6 +4,8 @@
     { "path": "packages/core" },
     { "path": "packages/zod" },
     { "path": "packages/express" },
-    { "path": "packages/fastify" }
+    { "path": "packages/fastify" },
+    { "path": "packages/nest" },
+    { "path": "packages/hono" }
   ]
 }
