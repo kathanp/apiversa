@@ -8,7 +8,7 @@ The Node core (`apiversa`) has no runtime dependencies. Framework adapters list 
 
 ## Path of one request
 
-1. The adapter (Express, Fastify, NestJS, Hono, Spring MVC) sees the request on a route registered with apiversa. Unregistered routes are untouched.
+1. The adapter (Express, Fastify, NestJS, Hono, Spring MVC, or Spring WebFlux) sees the request on a route registered with apiversa. Unregistered routes are untouched.
 2. The resolver finds the version: `Api-Version` header → host resolver (for example the API key's pin) → the `default` policy. Unknown, future, or retired dates end here with `AV-E002`, `AV-E003`, or `AV-E012`.
 3. Head version: nothing else happens (PERF-01). The handler runs.
 4. Older version: the precompiled plan for (route, version) runs the `up` operations of every newer change, oldest first, on the request body, headers, and path. Keys `__proto__`, `constructor`, `prototype` are dropped.
@@ -51,6 +51,7 @@ Outgoing webhooks and queue messages use the same `down` path through `downgrade
 | `spring/apiversa-maven-plugin/`        | Maven goals `check`, `changelog`, `lock`, and `init`      |
 | `spring/apiversa-micrometer/`          | Request and conversion counters as Micrometer meters        |
 | `spring/apiversa-actuator/`            | Read-only `/actuator/apiversa`                               |
+| `spring/apiversa-webflux/`             | WebFlux filter: same conversion, plus NDJSON and SSE lines   |
 
 Rows marked (planned) do not exist yet. When the agent creates a path, it removes "(planned)" from that row in the same commit. The guard fails on a row that names a missing path without "(planned)".
 

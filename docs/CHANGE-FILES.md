@@ -106,3 +106,11 @@ The rules below are normative in `docs/FEATURES-SPEC.md` Part B. This is the sho
 - Several change files may share a date. On the way up they run by ascending `id`. On the way down the whole chain runs in reverse, including the ops inside one file.
 - A missing key is not JSON `null`. `field.add` writes `default` only when the key is missing. A client that sent `null` still has `null`.
 - After at least one op runs, Node and Spring emit the same bytes: schema field order first, other keys in the order the client sent them, integers with no `.0`. A head request is not rewritten.
+
+## 6. Docs for every version
+
+`apiversa openapi` reads `api-versions/openapi.json` (OpenAPI 3.1, the head document) and writes one document per version under `api-versions/openapi/`, plus `picker.json`. Swagger UI reads `swagger.urls`. Scalar reads `scalar.sources`. Added endpoints are absent from older documents. Removed endpoints come back. Schema property names match `apiversa generate`.
+
+`apiversa changelog` writes `changelog.md` and `changelog.json`. Each version lists the change description and the endpoints it touches.
+
+Spring WebFlux uses the `apiversa-webflux` module with the same `apiversa.*` settings and `@ApiversaRequest` / `@ApiversaResponse`. NDJSON and SSE responses are converted one line at a time.

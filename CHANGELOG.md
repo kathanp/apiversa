@@ -91,3 +91,14 @@ One section per track and version. The agent adds one line per finished roadmap 
 - LIFE-01 Deprecation and Sunset headers
 - LIFE-03 Safe-to-remove report
 - LIFE-06 Pin upgrade with preview
+
+## node 0.5.0 (unreleased)
+
+- DOC-01 OpenAPI per version
+- DOC-02 Version picker
+- DOC-03 API changelog
+
+## spring 0.5.0 (unreleased)
+
+- SPR-06 WebFlux
+- STR-02 NDJSON and SSE

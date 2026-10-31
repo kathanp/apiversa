@@ -811,9 +811,9 @@ Theme: the CI gate.
 
 ### node 0.5.0
 Theme: docs for every version.
-- **DOC-01** OpenAPI per version — Evidence: cadwyn
-- **DOC-02** Version picker — Evidence: cadwyn
-- **DOC-03** API changelog — Evidence: stripe
+- **DOC-01** [x] OpenAPI per version — Evidence: cadwyn
+- **DOC-02** [x] Version picker — Evidence: cadwyn
+- **DOC-03** [x] API changelog — Evidence: stripe
 
 ### node 0.6.0
 Theme: more frameworks.
@@ -932,8 +932,8 @@ Theme: lifecycle.
 
 ### spring 0.5.0
 Theme: reactive.
-- **SPR-06** WebFlux — Evidence: adoption
-- **STR-02** NDJSON and SSE — Evidence: adoption
+- **SPR-06** [x] WebFlux — Evidence: adoption
+- **STR-02** [x] NDJSON and SSE — Evidence: adoption
 
 ### spring 0.6.0
 Theme: messages.
