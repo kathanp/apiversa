@@ -16,6 +16,7 @@
     <module>apiversa-micrometer</module>
     <module>apiversa-actuator</module>
     <module>apiversa-webflux</module>
+    <module>apiversa-kafka</module>
   </modules>
   <properties>
     <revision>0.1.0</revision>
