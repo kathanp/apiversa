@@ -224,6 +224,64 @@ public final class Engine {
         return downgradeEvent(bundle, payload, schema, pinned);
     }
 
+    /**
+     * Convert one NDJSON line. Blank lines and non-JSON lines pass through.
+     * Callers that stream must write this line before reading the next one.
+     */
+    public static String downgradeNdjsonLine(Bundle bundle, String line, String schema, String version) {
+        return downgradeJsonLine(bundle, line, schema, version);
+    }
+
+    /** Convert one SSE line. Only a `data:` JSON payload changes. Other lines pass through. */
+    public static String downgradeSseLine(Bundle bundle, String line, String schema, String version) {
+        if (!line.startsWith("data:")) return line;
+        String payload = line.substring(5).trim();
+        if (payload.isEmpty()) return line;
+        return "data: " + downgradeJsonLine(bundle, payload, schema, version);
+    }
+
+    /**
+     * Read one character at a time and write each converted line before the next line is read.
+     * This does not buffer the rest of the stream.
+     */
+    public static void downgradeNdjson(Bundle bundle, java.io.Reader in, String schema, String version, Appendable out) throws java.io.IOException {
+        streamLines(bundle, in, schema, version, out, false);
+    }
+
+    /** Same as {@link #downgradeNdjson}, for `text/event-stream` lines. */
+    public static void downgradeSse(Bundle bundle, java.io.Reader in, String schema, String version, Appendable out) throws java.io.IOException {
+        streamLines(bundle, in, schema, version, out, true);
+    }
+
+    private static void streamLines(Bundle bundle, java.io.Reader in, String schema, String version, Appendable out, boolean sse) throws java.io.IOException {
+        StringBuilder line = new StringBuilder();
+        int value;
+        while ((value = in.read()) != -1) {
+            if (value == '\n') {
+                out.append(sse ? downgradeSseLine(bundle, stripCr(line), schema, version) : downgradeNdjsonLine(bundle, stripCr(line), schema, version));
+                out.append('\n');
+                line.setLength(0);
+            } else {
+                line.append((char) value);
+            }
+        }
+        if (line.length() > 0) out.append(sse ? downgradeSseLine(bundle, stripCr(line), schema, version) : downgradeNdjsonLine(bundle, stripCr(line), schema, version));
+    }
+
+    private static String stripCr(StringBuilder line) {
+        if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') line.setLength(line.length() - 1);
+        return line.toString();
+    }
+
+    private static String downgradeJsonLine(Bundle bundle, String line, String schema, String version) {
+        String trimmed = line.trim();
+        if (trimmed.isEmpty() || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return line;
+        Limits limits = bundle.limits == null ? Limits.defaults() : bundle.limits;
+        Object plain = Json.toPlain(Json.parse(trimmed, "down", limits.maxBodyBytes, limits.maxArrayItems), schema, bundle.registry);
+        Object down = downgradeEvent(bundle, plain, schema, version);
+        return Json.encode(Json.fromPlain(down, "down"), "down");
+    }
+
     /** RFC 9745 Deprecation, RFC 8594 Sunset, and a link to the upgrade guide. Empty when the version is current. */
     public static List<String[]> deprecationHeaders(Bundle bundle, String version) {
         VersionInfo info = null;
