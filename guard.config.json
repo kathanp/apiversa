@@ -1,0 +1,47 @@
+{
+  "spec": "docs/FEATURES-SPEC.md",
+  "history": "docs/VERSION-HISTORY.md",
+  "changelog": "CHANGELOG.md",
+  "architecture": "docs/ARCHITECTURE.md",
+  "benchmarks": "docs/BENCHMARKS.md",
+  "benchMeasuredColumn": 2,
+  "roadmapBaselineTag": "roadmap-baseline",
+  "cooldownDays": 7,
+  "launch": {
+    "days": 28,
+    "cooldownDays": 1
+  },
+  "timeZone": "America/Chicago",
+  "tracks": {
+    "node": {
+      "versionFile": "node/packages/core/package.json",
+      "tagPrefix": "node-v"
+    },
+    "spring": {
+      "versionFile": "spring/pom.xml",
+      "tagPrefix": "spring-v"
+    }
+  },
+  "protected": [
+    "scripts/guard.mjs",
+    "scripts/scheduler.mjs",
+    "guard.config.json",
+    ".github/workflows/**",
+    "docs/RULES.md",
+    "docs/AUTOPILOT.md",
+    "docs/prompts/**",
+    ".cursor/rules/**",
+    "AGENTS.md",
+    "conformance/fixtures/released/**",
+    "node/vitest.config.ts",
+    "node/stryker.config.json",
+    "spring/quality-gates.properties"
+  ],
+  "tests": [
+    "**/test/**",
+    "**/src/test/**",
+    "conformance/fixtures/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}

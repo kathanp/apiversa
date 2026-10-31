@@ -1,0 +1,7 @@
+{
+  "schema": "Hotel",
+  "direction": "down",
+  "version": "2026-01-15",
+  "input": { "id": "h_1", "name": "Bay Inn", "price": { "amount": 89, "currency": "USD" } },
+  "expected": { "id": "h_1", "name": "Bay Inn", "price": 89 }
+}

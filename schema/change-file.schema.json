@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kathanp/apiversa/schema/change-file.schema.json",
+  "title": "apiversa change file and versions file, format 1",
+  "oneOf": [{ "$ref": "#/$defs/versionsFile" }, { "$ref": "#/$defs/changeFile" }],
+  "$defs": {
+    "date": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" },
+    "path": { "type": "string", "pattern": "^[A-Za-z_*][A-Za-z0-9_*]*(\\[\\])?(\\.[A-Za-z_*][A-Za-z0-9_*]*(\\[\\])?){0,31}$" },
+    "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+    "routePath": { "type": "string", "pattern": "^/" },
+    "expr": {},
+    "versionsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "versions"],
+      "properties": {
+        "format": { "const": 1 },
+        "head": { "$ref": "#/$defs/date" },
+        "default": { "enum": ["latest", "oldest", "pin-on-first-call"] },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["date"],
+            "properties": {
+              "date": { "$ref": "#/$defs/date" },
+              "deprecated": { "type": "boolean" },
+              "sunset": { "$ref": "#/$defs/date" }
+            }
+          }
+        }
+      }
+    },
+    "changeFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "id", "description", "changes"],
+      "properties": {
+        "format": { "const": 1 },
+        "version": { "$ref": "#/$defs/date" },
+        "id": { "$ref": "#/$defs/slug" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "draft": { "type": "boolean" },
+        "changes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/op" } }
+      }
+    },
+    "op": {
+      "type": "object",
+      "required": ["op"],
+      "oneOf": [
+        { "properties": { "op": { "const": "field.rename" }, "schema": { "$ref": "#/$defs/name" }, "from": { "$ref": "#/$defs/path" }, "to": { "$ref": "#/$defs/path" } }, "required": ["schema", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "field.add" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "default": {} }, "required": ["schema", "path", "default"], "additionalProperties": false },
+        { "properties": { "op": { "const": "field.remove" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "default": {} }, "required": ["schema", "path", "default"], "additionalProperties": false },
+        { "properties": { "op": { "const": "field.move" }, "schema": { "$ref": "#/$defs/name" }, "from": { "$ref": "#/$defs/path" }, "to": { "$ref": "#/$defs/path" } }, "required": ["schema", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "field.type" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "down": { "type": "object" }, "up": { "type": "object" } }, "required": ["schema", "path", "down", "up"], "additionalProperties": false },
+        { "properties": { "op": { "const": "enum.add" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "value": {}, "fallback": {} }, "required": ["schema", "path", "value", "fallback"], "additionalProperties": false },
+        { "properties": { "op": { "const": "enum.rename" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "from": {}, "to": {} }, "required": ["schema", "path", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "enum.remove" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "value": {}, "replacement": {} }, "required": ["schema", "path", "value", "replacement"], "additionalProperties": false },
+        { "properties": { "op": { "const": "object.wrap" }, "schema": { "$ref": "#/$defs/name" }, "fields": { "type": "array", "items": { "$ref": "#/$defs/path" }, "minItems": 1 }, "into": { "$ref": "#/$defs/path" } }, "required": ["schema", "fields", "into"], "additionalProperties": false },
+        { "properties": { "op": { "const": "endpoint.add" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" } }, "required": ["method", "path"], "additionalProperties": false },
+        { "properties": { "op": { "const": "endpoint.remove" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "legacyHandler": { "$ref": "#/$defs/name" } }, "required": ["method", "path", "legacyHandler"], "additionalProperties": false },
+        { "properties": { "op": { "const": "endpoint.rename" }, "method": { "$ref": "#/$defs/method" }, "from": { "$ref": "#/$defs/routePath" }, "to": { "$ref": "#/$defs/routePath" } }, "required": ["method", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "status.change" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "from": { "type": "integer", "minimum": 100, "maximum": 599 }, "to": { "type": "integer", "minimum": 100, "maximum": 599 } }, "required": ["method", "path", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "header.rename" }, "from": { "type": "string", "minLength": 1 }, "to": { "type": "string", "minLength": 1 } }, "required": ["from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "query.rename" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "from": { "$ref": "#/$defs/name" }, "to": { "$ref": "#/$defs/name" } }, "required": ["method", "path", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "query.add" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "name": { "$ref": "#/$defs/name" }, "default": {} }, "required": ["method", "path", "name", "default"], "additionalProperties": false },
+        { "properties": { "op": { "const": "query.remove" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "name": { "$ref": "#/$defs/name" } }, "required": ["method", "path", "name"], "additionalProperties": false },
+        { "properties": { "op": { "const": "error.shape" }, "code": { "type": "string" }, "status": { "type": "integer", "minimum": 400, "maximum": 599 }, "down": { "type": "object" } }, "required": ["down"], "anyOf": [{ "required": ["code"] }, { "required": ["status"] }], "additionalProperties": false },
+        { "properties": { "op": { "const": "custom" }, "converter": { "$ref": "#/$defs/name" } }, "required": ["converter"], "additionalProperties": false }
+      ]
+    }
+  }
+}

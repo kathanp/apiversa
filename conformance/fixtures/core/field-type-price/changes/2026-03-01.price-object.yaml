@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: price-object
+description: "Hotel.price changed from a number to {amount, currency}."
+changes:
+  - op: field.type
+    schema: Hotel
+    path: price
+    down: { from: "price.amount" }
+    up: { value: { amount: "$.price", currency: "USD" } }

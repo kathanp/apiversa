@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: a-rename
+description: "Hotel.city was renamed to Hotel.locality."
+changes:
+  - op: field.rename
+    schema: Hotel
+    from: city
+    to: locality

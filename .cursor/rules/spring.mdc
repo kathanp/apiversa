@@ -1,0 +1,11 @@
+---
+description: Rules for the Spring modules
+globs: ["spring/**"]
+alwaysApply: false
+---
+- Java 17 source level. No Lombok.
+- `apiversa-core-java` depends only on Jackson and SnakeYAML Engine (safe loader). Spring is `provided`/`optional`.
+- Conversion works on Jackson `JsonNode` trees. No reflection field access in the conversion path.
+- One op per class in `io.github.kathanp.apiversa.ops`, one test class per op.
+- Output for every conformance case must be byte-identical to the Node library (spec B7).
+- Fast check: `cd spring && mvn -q -DskipITs test`.

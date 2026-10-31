@@ -1,0 +1,11 @@
+---
+description: Rules for the Node packages
+globs: ["node/**"]
+alwaysApply: false
+---
+- TypeScript `strict`. ESM source. Build ESM + CJS with types.
+- `node/packages/core` has `"dependencies": {}`. Adapters use `peerDependencies` for their framework.
+- One op per file in `node/packages/core/src/ops/`, one test file per op.
+- Converters are pure: no I/O, clock, or randomness. Dev mode deep-freezes their input.
+- Public API changes update `etc/apiversa.api.md` (api-extractor) and `CHANGELOG.md` in the same commit.
+- Fast check: `cd node && npm run lint && npm run typecheck && npm test`.

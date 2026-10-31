@@ -1,0 +1,12 @@
+---
+description: Always-on rules for apiversa
+alwaysApply: true
+---
+- Read `AGENTS.md` first. `docs/RULES.md` wins over every other file.
+- Build only roadmap IDs from `docs/FEATURES-SPEC.md` Part H for the target version.
+- Tests first. Existing tests and fixtures are append-only.
+- Never edit files listed under `protected` in `guard.config.json`.
+- Never lower a threshold, budget, limit, or coverage gate.
+- Never publish, never run `npm login`, never store tokens. Publishing is GitHub Actions only.
+- Commit subject: `<feat|fix|test|docs|perf|chore|release|history>(<node|spring|shared>): <summary>`.
+- Run `node scripts/guard.mjs --gate-fast` before every commit.

@@ -1,0 +1,8 @@
+{
+  "schema": "Booking",
+  "fields": ["id", "guestCount"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "input": { "id": "b_1" },
+  "expected": { "id": "b_1", "guestCount": 1 }
+}

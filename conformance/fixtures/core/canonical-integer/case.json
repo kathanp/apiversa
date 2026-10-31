@@ -1,0 +1,8 @@
+{
+  "schema": "Hotel",
+  "fields": ["id"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "raw": "{\"id\":\"h_1\",\"n\":1.0}",
+  "expected": { "id": "h_1", "n": 1 }
+}

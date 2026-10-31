@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+target/
+.flattened-pom.xml
+reports/
+.stryker-tmp/
+.autopilot/
+*.tgz
+.DS_Store

@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: b-add
+description: "Hotel.city is restored with default unset after the rename."
+changes:
+  - op: field.add
+    schema: Hotel
+    path: city
+    default: unset

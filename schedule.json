@@ -1,0 +1,18 @@
+{
+  "timeZone": "America/Chicago",
+  "slots": [
+    {
+      "name": "am",
+      "time": "09:00",
+      "type": "build"
+    },
+    {
+      "name": "pm",
+      "time": "21:00",
+      "type": "harden"
+    }
+  ],
+  "weeklyReleaseDay": "Mon",
+  "windowMinutes": 120,
+  "runHours": 3
+}

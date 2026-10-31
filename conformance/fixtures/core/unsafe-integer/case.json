@@ -1,0 +1,7 @@
+{
+  "schema": "Hotel",
+  "direction": "up",
+  "version": "2026-01-15",
+  "raw": "{\"id\":\"h_1\",\"n\":9007199254740992}",
+  "error": "AV-E014"
+}

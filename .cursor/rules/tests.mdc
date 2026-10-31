@@ -1,0 +1,11 @@
+---
+description: Rules for test and fixture files
+globs: ["**/test/**", "**/src/test/**", "conformance/**", "**/*.test.ts"]
+alwaysApply: false
+---
+- Each `Done when` line in the spec becomes at least one test. Each `Refuses` line becomes a negative test.
+- No `Date.now()`, argument-less `new Date()`, `Math.random()`, `System.currentTimeMillis()`, or unseeded `Random`.
+- No `.only`, `.skip`, `it.todo`, `xit`, `xdescribe`. `@Disabled` needs a reason comment on the line above.
+- Never remove or change an existing line. Never delete or rename a test or fixture file.
+- Fake secrets are built by string concatenation.
+- A new test must fail on an assertion before the code exists, not on an import error.

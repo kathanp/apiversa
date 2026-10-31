@@ -1,0 +1,82 @@
+name: publish-spring
+# Snapshot: every green push to `next` deploys <revision>-SNAPSHOT (needs SNAPSHOT publishing enabled for the namespace).
+# Release: a tag spring-v<x.y.z> on main deploys to Maven Central, then runs the stranger check.
+# Maven Central has no OIDC; secrets live only in GitHub Actions.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [next]
+  push:
+    tags: ['spring-v*']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: spring } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.event.workflow_run.head_sha }}' }
+      - id: has
+        working-directory: .
+        run: echo "present=$([ -f spring/pom.xml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.has.outputs.present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+      - if: steps.has.outputs.present == 'true'
+        run: mvn -B -Drevision="$(mvn -q help:evaluate -Dexpression=revision -DforceStdout)-SNAPSHOT" deploy -DskipTests
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/spring-v')
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: spring } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - name: version matches tag
+        run: test "spring-v$(mvn -q help:evaluate -Dexpression=revision -DforceStdout)" = "${GITHUB_REF_NAME}"
+      - run: mvn -B -Prelease deploy
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+  stranger:
+    needs: release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: resolve from Maven Central in a clean project
+        id: check
+        continue-on-error: true
+        run: |
+          V="${GITHUB_REF_NAME#spring-v}"
+          cd examples/spring-smoke
+          for i in $(seq 1 20); do mvn -B -U -Dapiversa.version="$V" -Dmaven.repo.local=/tmp/m2 verify && exit 0; sleep 90; done; exit 1
+      - name: write result
+        if: always()
+        run: |
+          V="${GITHUB_REF_NAME#spring-v}"
+          PASS=$([ "${{ steps.check.outcome }}" = "success" ] && echo true || echo false)
+          echo "{\"pass\":$PASS,\"package\":\"io.github.kathanp:apiversa-spring-boot-starter\",\"version\":\"$V\",\"checkedAt\":\"$(date -u +%FT%TZ)\"}" > "stranger-spring-$V.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: stranger-spring, path: 'stranger-spring-*.json' }

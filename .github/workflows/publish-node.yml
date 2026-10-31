@@ -1,0 +1,80 @@
+name: publish-node
+# Pre-release: every green push to `next` publishes <version>-next.<run> to dist-tag `next`.
+# Stable: a tag node-v<x.y.z> on main publishes to `latest` after the tarball test, then runs the stranger check.
+# Trusted publishing (OIDC). No npm token is stored.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [next]
+  push:
+    tags: ['node-v*']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  prerelease:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: node } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.event.workflow_run.head_sha }}' }
+      - id: has
+        working-directory: .
+        run: echo "present=$([ -f node/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.has.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with: { node-version: 24, registry-url: 'https://registry.npmjs.org' }
+      - if: steps.has.outputs.present == 'true'
+        run: npm install -g npm@latest
+      - if: steps.has.outputs.present == 'true'
+        run: npm ci && npm run build
+      - if: steps.has.outputs.present == 'true'
+        name: set pre-release version
+        run: npm version --workspaces --no-git-tag-version "$(node -p "require('./packages/core/package.json').version")-next.${{ github.run_number }}"
+      - if: steps.has.outputs.present == 'true'
+        run: npm publish --workspaces --provenance --access public --tag next
+  stable:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/node-v')
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: node } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, registry-url: 'https://registry.npmjs.org' }
+      - run: npm install -g npm@latest
+      - run: npm ci && npm run build
+      - name: version matches tag
+        run: test "node-v$(node -p "require('./packages/core/package.json').version")" = "${GITHUB_REF_NAME}"
+      - name: pre-publish tarball test
+        run: |
+          mkdir -p /tmp/tgz && npm pack --workspaces --pack-destination /tmp/tgz
+          mkdir -p /tmp/try && cd /tmp/try && npm init -y >/dev/null && npm install /tmp/tgz/*.tgz
+          node "$GITHUB_WORKSPACE/examples/smoke.mjs"
+      - run: npm publish --workspaces --provenance --access public --tag latest
+  stranger:
+    needs: stable
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: install from the registry in a clean folder
+        id: check
+        continue-on-error: true
+        run: |
+          V="${GITHUB_REF_NAME#node-v}"
+          mkdir -p /tmp/stranger && cd /tmp/stranger && npm init -y >/dev/null
+          npm cache clean --force
+          for i in 1 2 3 4 5 6; do npm install "apiversa@$V" "@apiversa/express@$V" && break; sleep 30; done
+          node "$GITHUB_WORKSPACE/examples/smoke.mjs"
+      - name: write result
+        if: always()
+        run: |
+          V="${GITHUB_REF_NAME#node-v}"
+          PASS=$([ "${{ steps.check.outcome }}" = "success" ] && echo true || echo false)
+          echo "{\"pass\":$PASS,\"package\":\"apiversa\",\"version\":\"$V\",\"checkedAt\":\"$(date -u +%FT%TZ)\"}" > "stranger-node-$V.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: stranger-node, path: 'stranger-node-*.json' }
