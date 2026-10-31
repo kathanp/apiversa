@@ -15,6 +15,7 @@
     <module>apiversa-maven-plugin</module>
     <module>apiversa-micrometer</module>
     <module>apiversa-actuator</module>
+    <module>apiversa-webflux</module>
   </modules>
   <properties>
     <revision>0.1.0</revision>
