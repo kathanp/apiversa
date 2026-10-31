@@ -16,7 +16,7 @@ The Node core (`apiversa`) has no runtime dependencies. Framework adapters list 
 6. The plan runs the `down` operations of the same changes, newest first, on the response body (or error body). Arrays and paginated lists convert item by item. Streams convert per line or event.
 7. Deprecated versions get `Deprecation`, `Sunset`, and `Link` headers. Counters record the version and each change used.
 
-Outgoing webhooks and queue messages use the same `down` path through `downgradeEvent`.
+Outgoing webhooks use the same `down` path through `downgradeEvent`. A Kafka consumer upgrades the record value from the `Api-Version` header. A producer downgrades it. SQS and RabbitMQ call that same header-map conversion.
 
 ## Layout
 
@@ -41,8 +41,8 @@ Outgoing webhooks and queue messages use the same `down` path through `downgrade
 | `node/packages/core/src/cli/`          | `apiversa` command                                           |
 | `node/packages/express/`               | Express adapter                                              |
 | `node/packages/fastify/`               | Fastify adapter                                              |
-| `node/packages/nest/`                  | (planned) NestJS adapter                                     |
-| `node/packages/hono/`                  | (planned) Hono adapter                                       |
+| `node/packages/nest/`                  | NestJS adapter                                               |
+| `node/packages/hono/`                  | Hono adapter                                                 |
 | `node/packages/zod/`                   | Zod registry                                                 |
 | `spring/apiversa-core-java/`           | Java loader, ops, chains                                     |
 | `spring/apiversa-spring-boot-starter/` | Auto-configuration and MVC advice                            |
@@ -52,6 +52,7 @@ Outgoing webhooks and queue messages use the same `down` path through `downgrade
 | `spring/apiversa-micrometer/`          | Request and conversion counters as Micrometer meters        |
 | `spring/apiversa-actuator/`            | Read-only `/actuator/apiversa`                               |
 | `spring/apiversa-webflux/`             | WebFlux filter: same conversion, plus NDJSON and SSE lines   |
+| `spring/apiversa-kafka/`               | Kafka records and queue message conversion                   |
 
 Rows marked (planned) do not exist yet. When the agent creates a path, it removes "(planned)" from that row in the same commit. The guard fails on a row that names a missing path without "(planned)".
 

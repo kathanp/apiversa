@@ -102,3 +102,13 @@ One section per track and version. The agent adds one line per finished roadmap 
 
 - SPR-06 WebFlux
 - STR-02 NDJSON and SSE
+
+## node 0.6.0 (unreleased)
+
+- FW-03 NestJS adapter
+- FW-04 Hono adapter
+
+## spring 0.6.0 (unreleased)
+
+- SPR-07 Kafka messages
+- EVT-03 Message queues

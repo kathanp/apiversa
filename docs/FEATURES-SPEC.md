@@ -817,8 +817,8 @@ Theme: docs for every version.
 
 ### node 0.6.0
 Theme: more frameworks.
-- **FW-03** NestJS adapter — Evidence: adoption
-- **FW-04** Hono adapter — Evidence: adoption
+- **FW-03** [x] NestJS adapter — Evidence: adoption
+- **FW-04** [x] Hono adapter — Evidence: adoption
 
 ### node 0.7.0
 Theme: lists, streams and forms.
@@ -937,8 +937,8 @@ Theme: reactive.
 
 ### spring 0.6.0
 Theme: messages.
-- **SPR-07** Kafka messages — Evidence: adoption
-- **EVT-03** Message queues — Evidence: adoption
+- **SPR-07** [x] Kafka messages — Evidence: adoption
+- **EVT-03** [x] Message queues — Evidence: adoption
 
 ### spring 0.7.0
 Theme: forms and fuzzing.
