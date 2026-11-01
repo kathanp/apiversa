@@ -1,5 +1,5 @@
 import type { Direction } from './errors.js';
-import { ApiversaError } from './errors.js';
+import { ApiversaError, fail } from './errors.js';
 import { loadBundle, type Bundle } from './bundle/load.js';
 import { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
 
@@ -65,6 +65,10 @@ export type Apiversa = {
   clientField(version: string, schema: string, headPath: string): ClientField;
   /** Head-schema issues, rewritten for the client. A passing parse returns undefined. */
   clientValidation(version: string, schema: string, body: unknown, parser: SchemaParser): ClientIssue[] | undefined;
+  /** Outgoing event in that version's shape. Same `down` chain as a response. */
+  downgradeEvent(payload: unknown, schema: string, version: string): unknown;
+  /** Downgrade using the subscriber's pin. A missing pin is AV-E002. */
+  downgradeForSubscriber(payload: unknown, schema: string, subscriberId: string): unknown;
 };
 
 /**
@@ -138,6 +142,14 @@ export function api(
     },
     clientValidation(version, schema, body, parser) {
       return clientValidation(bundle, version, schema, body, parser);
+    },
+    downgradeEvent(payload, schema, version) {
+      return prepare('down', { schema, body: payload, version }).body;
+    },
+    downgradeForSubscriber(payload, schema, subscriberId) {
+      const pinned = subscriberId ? bundle.pins?.get(subscriberId) : undefined;
+      if (!bundle.pins || !subscriberId || !pinned) throw fail('AV-E002', 'down', 'no pin for subscriber', bundle.dates);
+      return prepare('down', { schema, body: payload, version: pinned }).body;
     },
   };
 }
