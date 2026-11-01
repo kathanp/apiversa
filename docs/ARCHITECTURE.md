@@ -14,7 +14,7 @@ The Node core (`apiversa`) has no runtime dependencies. Framework adapters list 
 4. Older version: the precompiled plan for (route, version) runs the `up` operations of every newer change, oldest first, on the request body, headers, and path. A form body's text fields take the same ops. A file part is copied. Keys `__proto__`, `constructor`, `prototype` are dropped.
 5. The handler runs once, at head. When the head schema rejects the upgraded request, the error paths are translated back to the client's field names. A field the client never had is reported as `_head`.
 6. The plan runs the `down` operations of the same changes, newest first, on the response body (or error body). Arrays and paginated lists convert item by item. Streams convert per line or event.
-7. Deprecated versions get `Deprecation`, `Sunset`, and `Link` headers. Counters record the version and each change used.
+7. Deprecated versions get `Deprecation`, `Sunset`, and `Link` headers. Counters stay in the process. The host reads `stats()`, Prometheus text, or metric points. apiversa does not send them. `memoryPins()` keeps pins in memory. `@apiversa/pin-redis` stores a pin through the host's Redis client.
 
 Outgoing webhooks use the same `down` path through `downgradeEvent`. A subscriber pin selects that version. A missing pin is `AV-E002`. A Kafka consumer upgrades the record value from the `Api-Version` header. A producer downgrades it. SQS and RabbitMQ call that same header-map conversion.
 
@@ -43,6 +43,7 @@ Outgoing webhooks use the same `down` path through `downgradeEvent`. A subscribe
 | `node/packages/fastify/`               | Fastify adapter                                              |
 | `node/packages/nest/`                  | NestJS adapter                                               |
 | `node/packages/hono/`                  | Hono adapter                                                 |
+| `node/packages/pin-redis/`             | Redis pin store. The host supplies the client                |
 | `node/packages/zod/`                   | Zod registry                                                 |
 | `spring/apiversa-core-java/`           | Java loader, ops, chains                                     |
 | `spring/apiversa-spring-boot-starter/` | Auto-configuration and MVC advice                            |

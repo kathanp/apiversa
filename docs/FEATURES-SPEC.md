@@ -839,9 +839,9 @@ Theme: versioned webhooks.
 
 ### node 0.10.0
 Theme: lifecycle.
-- **LIFE-01** Deprecation and Sunset headers — Evidence: rfc
-- **LIFE-02** Usage counters — Evidence: adoption
-- **LIFE-05** Pin stores (memory, Redis) — Evidence: stripe
+- **LIFE-01** [x] Deprecation and Sunset headers — Evidence: rfc
+- **LIFE-02** [x] Usage counters — Evidence: adoption
+- **LIFE-05** [x] Pin stores (memory, Redis) — Evidence: stripe
 
 ### node 0.11.0
 Theme: adopt and leave without pain.

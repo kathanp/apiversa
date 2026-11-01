@@ -144,3 +144,9 @@ One section per track and version. The agent adds one line per finished roadmap 
 
 - SHR-03 Cross-implementation gate
 - TEST-07 Traffic replay
+
+## node 0.10.0 (unreleased)
+
+- LIFE-01 Deprecation and Sunset headers
+- LIFE-02 Usage counters
+- LIFE-05 Pin stores (memory, Redis)
