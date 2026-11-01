@@ -7,9 +7,10 @@ import { doctor } from './doctor.js';
 import { generate } from './generate.js';
 import { init } from './init.js';
 import { lockFiles } from './lock.js';
+import { testBundle } from './contract.js';
 import { writeOpenApi } from './openapi.js';
 
-/** `apiversa init|lock|doctor|generate|check|openapi|changelog`. Returns the process status. */
+/** `apiversa init|lock|doctor|generate|check|test|openapi|changelog`. Returns the process status. */
 export function runCli(argv: string[], cwd = process.cwd()): number {
   const command = argv[2];
   const rest = argv.slice(3);
@@ -63,6 +64,12 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
       return 1;
     }
   }
+  if (command === 'test') {
+    const result = testBundle(dir);
+    const out = result.ok ? process.stdout : process.stderr;
+    out.write(`${result.summary}\n`);
+    return result.ok ? 0 : 1;
+  }
   if (command === 'doctor') {
     const problems = doctor(dir);
     if (problems.length === 0) {
@@ -72,7 +79,7 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
     for (const problem of problems) process.stderr.write(`${problem.message} Fix: ${problem.fix}\n`);
     return 1;
   }
-  process.stderr.write('usage: apiversa init [directory] | apiversa lock [api-versions] | apiversa doctor [api-versions] | apiversa generate [api-versions] | apiversa check [api-versions] [--format markdown] [--suggest] | apiversa openapi [api-versions] | apiversa changelog [api-versions] [--format json]\n');
+  process.stderr.write('usage: apiversa init [directory] | apiversa lock [api-versions] | apiversa doctor [api-versions] | apiversa generate [api-versions] | apiversa check [api-versions] [--format markdown] [--suggest] | apiversa test [api-versions] | apiversa openapi [api-versions] | apiversa changelog [api-versions] [--format json]\n');
   return 1;
 }
 

@@ -1,6 +1,9 @@
 import type { Direction } from './errors.js';
 import { ApiversaError } from './errors.js';
 import { loadBundle, type Bundle } from './bundle/load.js';
+import { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
+
+export type { ClientField, ClientIssue, SchemaParser };
 import { bodyPlanEmpty, execute, type ExecuteResult } from './chain/run.js';
 import { DEFAULT_LIMITS } from './limits.js';
 import type { Converter, HeaderPair, PinStore, QueryPair } from './model.js';
@@ -58,6 +61,10 @@ export type Apiversa = {
   prepare(direction: Direction, input: ConvertInput): ExecuteResult;
   /** True when this version and schema need no body parse. */
   planIsEmpty(version: string, schema: string | undefined, direction: Direction): boolean;
+  /** Head path translated into the client's field name. A later field is `_head`. */
+  clientField(version: string, schema: string, headPath: string): ClientField;
+  /** Head-schema issues, rewritten for the client. A passing parse returns undefined. */
+  clientValidation(version: string, schema: string, body: unknown, parser: SchemaParser): ClientIssue[] | undefined;
 };
 
 /**
@@ -125,6 +132,12 @@ export function api(
     prepare,
     planIsEmpty(version, schema, direction) {
       return bodyPlanEmpty(bundle, version, schema, direction);
+    },
+    clientField(version, schema, headPath) {
+      return clientField(bundle, version, schema, headPath);
+    },
+    clientValidation(version, schema, body, parser) {
+      return clientValidation(bundle, version, schema, body, parser);
     },
   };
 }
