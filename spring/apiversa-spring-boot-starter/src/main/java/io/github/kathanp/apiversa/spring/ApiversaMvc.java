@@ -47,10 +47,15 @@ final class ApiversaMvc {
     static final String UP = "io.github.kathanp.apiversa.up";
     static final String BODY = "io.github.kathanp.apiversa.body";
     static final String TRACE = "io.github.kathanp.apiversa.trace";
+    static final String SOURCE = "io.github.kathanp.apiversa.source";
 
     private ApiversaMvc() {}
 
     static String resolve(Engine.Bundle bundle, ApiversaProperties properties, HttpServletRequest request, ApiversaVersionResolver host) {
+        return decide(bundle, properties, request, host).version();
+    }
+
+    static Engine.Decision decide(Engine.Bundle bundle, ApiversaProperties properties, HttpServletRequest request, ApiversaVersionResolver host) {
         boolean headerPresent = false;
         Enumeration<String> names = request.getHeaderNames();
         if (names != null) {
@@ -59,7 +64,7 @@ final class ApiversaMvc {
             }
         }
         String resolved = headerPresent || host == null ? null : host.resolve(request);
-        return Engine.resolve(bundle, headerMap(request), properties.getHeader(), resolved, null);
+        return Engine.resolveDecision(bundle, headerMap(request), properties.getHeader(), resolved, null);
     }
 
     static void writeError(HttpServletResponse response, ApiversaException exception) throws IOException {
@@ -262,6 +267,7 @@ final class ApiversaUsageRecorder {
         Object client = request.getAttribute("apiversa.client");
         String clientId = client instanceof String text && !text.isBlank() ? text : null;
         usages.orderedStream().forEach(usage -> usage.record(version, clientId, ids));
+        if ("default".equals(request.getAttribute(ApiversaMvc.SOURCE))) usages.orderedStream().forEach(usage -> usage.recordUnpinned(version));
     }
 
     static void applyDeprecation(HttpServletResponse response, Engine.Bundle bundle, String version) {
@@ -287,8 +293,11 @@ final class ApiversaFilter extends OncePerRequestFilter {
         VersionedRequest wrapped = new VersionedRequest(request);
         if (ApiversaMvc.endpointRelevant(bundle, request)) {
             try {
-                String version = ApiversaMvc.resolve(bundle, properties, request, host);
+                Engine.Decision decision = ApiversaMvc.decide(bundle, properties, request, host);
+                String version = decision.version();
                 wrapped.setAttribute(ApiversaMvc.VERSION, version);
+                wrapped.setAttribute(ApiversaMvc.SOURCE, decision.source());
+                for (String[] header : Engine.versionHeaders(properties.getHeader(), decision)) response.setHeader(header[0], header[1]);
                 ApiversaUsageRecorder.applyDeprecation(response, bundle, version);
                 Engine.Result result = ApiversaMvc.upgrade(bundle, properties, request, version);
                 wrapped.rewrite(result.path(), result.query());
@@ -322,7 +331,10 @@ final class ApiversaInterceptor implements HandlerInterceptor {
         if (!ApiversaMvc.annotated(handler)) return true;
         try {
             if (request.getAttribute(ApiversaMvc.VERSION) == null) {
-                request.setAttribute(ApiversaMvc.VERSION, ApiversaMvc.resolve(bundle, properties, request, host));
+                Engine.Decision decision = ApiversaMvc.decide(bundle, properties, request, host);
+                request.setAttribute(ApiversaMvc.VERSION, decision.version());
+                request.setAttribute(ApiversaMvc.SOURCE, decision.source());
+                for (String[] header : Engine.versionHeaders(properties.getHeader(), decision)) response.setHeader(header[0], header[1]);
             }
             if (request.getAttribute(ApiversaMvc.UP) == null) {
                 Engine.Result result = ApiversaMvc.upgrade(bundle, properties, request, String.valueOf(request.getAttribute(ApiversaMvc.VERSION)));

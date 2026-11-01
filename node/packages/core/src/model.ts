@@ -71,6 +71,7 @@ export function opRuns(op: RawOp, direction: Direction, converters: Record<strin
     case 'endpoint.add':
     case 'endpoint.remove':
     case 'endpoint.rename':
+    case 'field.deprecate':
       return false;
     case 'custom': {
       const converter = op.converter ? converters[op.converter] : undefined;

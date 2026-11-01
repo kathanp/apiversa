@@ -58,6 +58,32 @@ class PluginGoalsTest {
         assertEquals("AV-E001", assertThrows(ApiversaException.class, () -> PluginGoals.init(dir)).code());
     }
 
+    @Test
+    void matrixListsChangesInChainOrder(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("versions.yaml"), """
+                head: "2026-03-01"
+                versions:
+                  - date: "2026-03-01"
+                  - date: "2026-01-15"
+                default: oldest
+                """);
+        Files.writeString(dir.resolve("2026-03-01.add-name.yaml"), """
+                version: "2026-03-01"
+                id: add-name
+                description: Hotel.name was added.
+                changes:
+                  - op: field.add
+                    schema: Hotel
+                    path: name
+                    default: Bay
+                """);
+        String matrix = PluginGoals.matrix(dir, "2026-10-30");
+        assertTrue(matrix.contains("\"head\":\"2026-03-01\""));
+        assertTrue(matrix.contains("2026-03-01.add-name"));
+        assertTrue(matrix.contains("Hotel.name was added."));
+        assertTrue(matrix.contains("\"2026-03-01\":[]") || matrix.contains("\"2026-03-01\": []"));
+    }
+
     private static void set(Object target, String name, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);

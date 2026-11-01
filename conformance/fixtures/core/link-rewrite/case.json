@@ -1,0 +1,8 @@
+{
+  "schema": "Hotel",
+  "fields": ["url"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "input": { "url": "/hotels/h_1" },
+  "expected": { "url": "/properties/h_1" }
+}

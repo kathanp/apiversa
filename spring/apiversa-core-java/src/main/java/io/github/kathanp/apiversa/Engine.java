@@ -43,9 +43,16 @@ public final class Engine {
 
     public record Change(String version, String id, String description, List<Map<String, Object>> ops) {}
 
-    public record VersionInfo(String date, boolean deprecated, @Nullable String sunset) {}
+    public record VersionInfo(String date, boolean deprecated, @Nullable String sunset, boolean sunsetEnforce) {
+        public VersionInfo(String date, boolean deprecated, @Nullable String sunset) {
+            this(date, deprecated, sunset, false);
+        }
+    }
 
-    public record Bundle(String head, List<String> dates, String oldest, String policy, List<Change> changes, Map<String, SchemaDef> registry, Map<String, Converter> converters, Limits limits, @Nullable PinStore pins, String oversize, List<VersionInfo> versionInfo) {}
+    public record Bundle(String head, List<String> dates, String oldest, String policy, List<Change> changes, Map<String, SchemaDef> registry, Map<String, Converter> converters, Limits limits, @Nullable PinStore pins, String oversize, List<VersionInfo> versionInfo, String now) {}
+
+    /** Which rule selected the date. `default` is the only source that sets `Apiversa-Default`. */
+    public record Decision(String version, String source) {}
 
     public record Step(String version, String id, Map<String, Object> op) {}
 
@@ -91,7 +98,7 @@ public final class Engine {
             Map<?, ?> row = (Map<?, ?>) item;
             dates.add(String.valueOf(row.get("date")));
             Object sunset = row.get("sunset");
-            info.add(new VersionInfo(String.valueOf(row.get("date")), Boolean.TRUE.equals(row.get("deprecated")), sunset == null ? null : String.valueOf(sunset)));
+            info.add(new VersionInfo(String.valueOf(row.get("date")), Boolean.TRUE.equals(row.get("deprecated")), sunset == null ? null : String.valueOf(sunset), Boolean.TRUE.equals(row.get("sunsetEnforce"))));
         }
         if (Set.copyOf(dates).size() != dates.size()) throw ApiversaException.fail("AV-E001", "startup");
         for (int i = 1; i < dates.size(); i++) if (dates.get(i).compareTo(dates.get(i - 1)) >= 0) throw ApiversaException.fail("AV-E001", "startup");
@@ -119,11 +126,15 @@ public final class Engine {
                 Map<String, Object> op = (Map<String, Object>) item;
                 if (op.get("schema") != null && !schemas.containsKey(String.valueOf(op.get("schema")))) throw ApiversaException.fail("AV-E001", "startup");
                 if ("custom".equals(op.get("op")) && (op.get("converter") == null || !funcs.containsKey(String.valueOf(op.get("converter"))))) throw ApiversaException.fail("AV-E001", "startup");
+                String opName = String.valueOf(op.get("op"));
+                if (("header.add".equals(opName) || "header.remove".equals(opName)) && !(op.get("default") instanceof String)) throw ApiversaException.fail("AV-E001", "startup");
+                if (("header.add".equals(opName) || "header.remove".equals(opName)) && op.get("name") != null && String.valueOf(op.get("name")).equalsIgnoreCase("Api-Version")) throw ApiversaException.fail("AV-E001", "startup");
+                if ("link.rewrite".equals(opName) && (String.valueOf(op.get("from")) + String.valueOf(op.get("to"))).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
                 ops.add(op);
             }
             changes.add(new Change(version, id, String.valueOf(raw.get("description")), ops));
         }
-        return new Bundle(String.valueOf(versions.get("head")), List.copyOf(dates), dates.get(dates.size() - 1), policy, List.copyOf(changes), schemas, funcs, limits == null ? Limits.defaults() : limits, pins, oversize == null ? "error" : oversize, List.copyOf(info));
+        return new Bundle(String.valueOf(versions.get("head")), List.copyOf(dates), dates.get(dates.size() - 1), policy, List.copyOf(changes), schemas, funcs, limits == null ? Limits.defaults() : limits, pins, oversize == null ? "error" : oversize, List.copyOf(info), clock);
     }
 
     private static final java.util.Map<Bundle, java.util.Map<String, List<Step>>> PLAN_CACHE = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
@@ -195,7 +206,7 @@ public final class Engine {
                         current = apply(current, request.schema, step.op, direction, bundle, request, status, 0);
                     }
                 } else if (name.startsWith("query.")) query = queryOp(query, step.op, direction);
-                else if ("header.rename".equals(name)) headers = headerRename(headers, step.op, direction);
+                else if (name.startsWith("header.")) headers = headerOp(headers, step.op, direction);
                 else if ("status.change".equals(name)) status = statusChange(status, step.op, direction);
             }
             body = materialize(current, request.schema, bundle.registry);
@@ -203,11 +214,18 @@ public final class Engine {
             for (Step step : steps) {
                 String name = String.valueOf(step.op.get("op"));
                 if (name.startsWith("query.")) query = queryOp(query, step.op, direction);
-                else if ("header.rename".equals(name)) headers = headerRename(headers, step.op, direction);
+                else if (name.startsWith("header.")) headers = headerOp(headers, step.op, direction);
                 else if ("status.change".equals(name)) status = statusChange(status, step.op, direction);
             }
         }
         return finish(request, direction, steps, body, path, query, headers, status, legacy, parsed);
+    }
+
+    /** The payload in head shape. Same `up` chain as a request. An empty plan returns the original value. */
+    public static Object upgradeEvent(Bundle bundle, Object payload, String schema, String version) {
+        String resolved = resolve(bundle, java.util.Map.of("Api-Version", java.util.List.of(version)), "Api-Version", null, null);
+        Result result = execute(bundle, new Request(schema, resolved, payload, null, null, java.util.List.of(), java.util.List.of(), null, false, null, false), "up");
+        return result.body();
     }
 
     /** The payload in `version`'s shape. Same `down` chain as a response. */
@@ -426,12 +444,27 @@ public final class Engine {
     }
 
     public static String resolve(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId) {
-        List<String> values = readHeader(headers, headerName == null ? "Api-Version" : headerName);
+        return resolveDecision(bundle, headers, headerName, resolved, clientId).version();
+    }
+
+    /** The date that won, and which rule selected it. */
+    public static Decision resolveDecision(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId) {
+        String name = headerName == null || headerName.isBlank() ? "Api-Version" : headerName;
+        List<String> values = readHeader(headers, name);
         List<String> distinct = values.stream().distinct().toList();
         if (distinct.size() > 1) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
-        String explicit = distinct.isEmpty() ? resolved : distinct.get(0);
-        if (explicit != null && !explicit.isEmpty()) return classify(bundle, explicit);
-        return applyDefault(bundle, clientId);
+        if (!distinct.isEmpty()) return new Decision(classify(bundle, distinct.get(0), name), "header");
+        if (resolved != null && !resolved.isEmpty()) return new Decision(classify(bundle, resolved, name), "resolver");
+        return applyDefault(bundle, clientId, name);
+    }
+
+    /** Echo the resolved date. `Apiversa-Default` is set only when the default policy chose it. */
+    public static List<String[]> versionHeaders(@Nullable String headerName, Decision decision) {
+        String name = headerName == null || headerName.isBlank() ? "Api-Version" : headerName;
+        List<String[]> headers = new ArrayList<>();
+        headers.add(new String[] {name, decision.version()});
+        if ("default".equals(decision.source())) headers.add(new String[] {"Apiversa-Default", decision.version()});
+        return headers;
     }
 
     public record Request(@Nullable String schema, String version, @Nullable Object body, @Nullable String method, @Nullable String path, @Nullable List<String[]> query, @Nullable List<String[]> headers, @Nullable Integer status, boolean isError, @Nullable String errorCode, boolean trace) {}
@@ -471,11 +504,11 @@ public final class Engine {
 
     private static boolean bodyOp(Map<String, Object> op) {
         String name = String.valueOf(op.get("op"));
-        return name.startsWith("field.") || name.startsWith("enum.") || "object.wrap".equals(name) || "custom".equals(name) || "error.shape".equals(name);
+        return ((name.startsWith("field.") && !"field.deprecate".equals(name)) || name.startsWith("enum.") || "object.wrap".equals(name) || "custom".equals(name) || "error.shape".equals(name) || "link.rewrite".equals(name));
     }
 
     private static boolean meta(String op) {
-        return op.startsWith("query.") || "header.rename".equals(op) || "status.change".equals(op);
+        return op.startsWith("query.") || op.startsWith("header.") || "status.change".equals(op);
     }
 
     private static boolean runs(Map<String, Object> op, String direction, Map<String, Converter> converters) {
@@ -483,7 +516,7 @@ public final class Engine {
         return switch (name) {
             case "enum.add", "error.shape", "status.change" -> "down".equals(direction);
             case "enum.remove", "query.rename", "query.add", "query.remove" -> "up".equals(direction);
-            case "endpoint.add", "endpoint.remove", "endpoint.rename" -> false;
+            case "endpoint.add", "endpoint.remove", "endpoint.rename", "field.deprecate" -> false;
             case "custom" -> op.get("converter") != null && converters.containsKey(String.valueOf(op.get("converter"))) && ("up".equals(direction) || converters.get(String.valueOf(op.get("converter"))) != null);
             default -> true;
         };
@@ -499,6 +532,7 @@ public final class Engine {
         if (root.equals(target)) return true;
         if (!seen.add(root)) return false;
         SchemaDef def = registry.get(root);
+        if (def != null && def.discriminator() != null && def.discriminator().containsValue(target)) return true;
         if (def == null || def.fields() == null) return false;
         for (SchemaField field : def.fields()) {
             if (field.schema() != null && mentions(registry, field.schema(), target, seen)) return true;
@@ -518,7 +552,7 @@ public final class Engine {
         V current = obj;
         String name = String.valueOf(op.get("op"));
         String opSchema = op.get("schema") == null ? null : String.valueOf(op.get("schema"));
-        if (!"error.shape".equals(name) && (opSchema == null || opSchema.equals(schema))) current = onObject(obj, op, direction, bundle, schema);
+        if (!"error.shape".equals(name) && schemaSelected(bundle, schema, opSchema, obj)) current = onObject(obj, op, direction, bundle, schema);
         if ("error.shape".equals(name) && (opSchema == null || opSchema.equals(schema)) && current instanceof Obj error) current = errorShape(error, op, direction, status, request.errorCode);
         if (!(current instanceof Obj object)) return current;
         SchemaDef def = schema == null ? null : bundle.registry.get(schema);
@@ -546,6 +580,8 @@ public final class Engine {
             case "enum.remove" -> enumMap(obj, text(op, "path"), op.get("value"), op.get("replacement"), direction, false);
             case "enum.rename" -> enumRename(obj, text(op, "path"), op.get("from"), op.get("to"), direction);
             case "object.wrap" -> wrap(obj, op, direction);
+            case "link.rewrite" -> linkRewrite(obj, op, direction);
+            case "field.deprecate" -> { }
             case "custom" -> {
                 return custom(obj, op, direction, bundle, schema);
             }
@@ -799,6 +835,141 @@ public final class Engine {
         return query;
     }
 
+    private static boolean schemaSelected(Bundle bundle, String schema, String opSchema, Obj obj) {
+        if (opSchema == null || opSchema.equals(schema)) return true;
+        SchemaDef def = schema == null ? null : bundle.registry.get(schema);
+        if (def == null || def.discriminatorPath() == null) return false;
+        V leaf = obj.values.get(def.discriminatorPath());
+        if (!(leaf instanceof Json.Str text)) return false;
+        return opSchema.equals(def.discriminator().get(text.value()));
+    }
+
+    private static List<String[]> headerOp(List<String[]> headers, Map<String, Object> op, String direction) {
+        String name = String.valueOf(op.get("op"));
+        if ("header.rename".equals(name)) return headerRename(headers, op, direction);
+        if ("header.add".equals(name)) return headerAdd(headers, op, direction);
+        if ("header.remove".equals(name)) return headerRemove(headers, op, direction);
+        return headers;
+    }
+
+    private static List<String[]> headerAdd(List<String[]> headers, Map<String, Object> op, String direction) {
+        String name = String.valueOf(op.get("name"));
+        String fallback = String.valueOf(op.get("default"));
+        if ("up".equals(direction)) {
+            for (String[] header : headers) if (header[0].equalsIgnoreCase(name)) return headers;
+            List<String[]> out = new ArrayList<>(headers);
+            out.add(new String[] {name, fallback});
+            return out;
+        }
+        List<String[]> out = new ArrayList<>();
+        for (String[] header : headers) if (!header[0].equalsIgnoreCase(name) || !header[1].trim().equals(fallback)) out.add(header);
+        return out;
+    }
+
+    private static List<String[]> headerRemove(List<String[]> headers, Map<String, Object> op, String direction) {
+        String name = String.valueOf(op.get("name"));
+        String fallback = String.valueOf(op.get("default"));
+        if ("up".equals(direction)) {
+            List<String[]> out = new ArrayList<>();
+            for (String[] header : headers) if (!header[0].equalsIgnoreCase(name)) out.add(header);
+            return out;
+        }
+        for (String[] header : headers) if (header[0].equalsIgnoreCase(name)) return headers;
+        List<String[]> out = new ArrayList<>(headers);
+        out.add(new String[] {name, fallback});
+        return out;
+    }
+
+    private static void linkRewrite(Obj obj, Map<String, Object> op, String direction) {
+        String from = String.valueOf("up".equals(direction) ? op.get("from") : op.get("to"));
+        String to = String.valueOf("up".equals(direction) ? op.get("to") : op.get("from"));
+        for (Leaf leaf : leaves(obj, String.valueOf(op.get("path")), direction)) {
+            if (!leaf.exists) continue;
+            V value = leaf.parent.values.get(leaf.key);
+            if (!(value instanceof Json.Str text)) continue;
+            String next = rewriteLink(text.value(), from, to);
+            if (!next.equals(text.value())) leaf.parent.set(leaf.key, new Json.Str(next));
+        }
+    }
+
+    private static String rewriteLink(String value, String from, String to) {
+        int hash = value.indexOf('#');
+        String withQuery = hash < 0 ? value : value.substring(0, hash);
+        String fragment = hash < 0 ? "" : value.substring(hash);
+        int queryAt = withQuery.indexOf('?');
+        String beforeQuery = queryAt < 0 ? withQuery : withQuery.substring(0, queryAt);
+        String query = queryAt < 0 ? "" : withQuery.substring(queryAt);
+        String prefix = "";
+        String path = beforeQuery;
+        if (beforeQuery.matches("(?i)[a-z][a-z0-9+.-]*://.*")) {
+            int scheme = beforeQuery.indexOf("://");
+            int slash = beforeQuery.indexOf('/', scheme + 3);
+            if (slash < 0) return value;
+            prefix = beforeQuery.substring(0, slash);
+            path = beforeQuery.substring(slash);
+        }
+        String rewritten = rewriteLinkPath(path, from, to);
+        if (rewritten == null) return value;
+        return prefix + rewritten + query + fragment;
+    }
+
+    private static String rewriteLinkPath(String path, String from, String to) {
+        String[] parts = path.split("/", -1);
+        String[] fromParts = from.split("/", -1);
+        if (parts.length != fromParts.length) return null;
+        Map<String, String> captured = new LinkedHashMap<>();
+        for (int i = 0; i < parts.length; i++) {
+            String pattern = fromParts[i];
+            String actual = parts[i];
+            if (pattern.startsWith(":")) {
+                if (actual.isEmpty()) return null;
+                captured.put(pattern.substring(1), actual);
+            } else if (!pattern.equals(actual)) return null;
+        }
+        String[] toParts = to.split("/", -1);
+        List<String> next = new ArrayList<>();
+        for (String segment : toParts) {
+            if (!segment.startsWith(":")) {
+                next.add(segment);
+                continue;
+            }
+            String capturedValue = captured.get(segment.substring(1));
+            if (capturedValue == null) return null;
+            next.add(capturedValue);
+        }
+        return String.join("/", next);
+    }
+
+    /**
+     * Each change between {@code from} and {@code to}, then the canonical body.
+     * Equal dates return an empty string and do not parse {@code bodyText}.
+     */
+    public static String diffText(Bundle bundle, String schema, String from, String to, String bodyText) {
+        String target = to == null || to.isBlank() ? bundle.head : to;
+        if (from.equals(target)) return "";
+        String direction = from.compareTo(target) < 0 ? "up" : "down";
+        List<Step> steps = new ArrayList<>();
+        List<Change> selected = new ArrayList<>();
+        for (Change change : bundle.changes) {
+            boolean include = "up".equals(direction) ? change.version.compareTo(from) > 0 && change.version.compareTo(target) <= 0 : change.version.compareTo(target) > 0 && change.version.compareTo(from) <= 0;
+            if (include) selected.add(change);
+        }
+        selected.sort(Comparator.comparing(Change::version).thenComparing(Change::id));
+        for (Change change : selected) for (Map<String, Object> op : change.ops) steps.add(new Step(change.version, change.id, op));
+        if ("down".equals(direction)) java.util.Collections.reverse(steps);
+        Limits limits = bundle.limits == null ? Limits.defaults() : bundle.limits;
+        V current = Json.parse(bodyText, direction, limits.maxBodyBytes, limits.maxArrayItems);
+        StringBuilder lines = new StringBuilder();
+        Request request = new Request(schema, from, null, null, null, List.of(), List.of(), null, false, null, false);
+        for (Step step : steps) {
+            current = apply(current, schema, step.op, direction, bundle, request, null, 0);
+            String canon = Json.encode(Json.fromPlain(materialize(current, schema, bundle.registry), direction), direction);
+            if (!lines.isEmpty()) lines.append('\n');
+            lines.append(step.version).append('.').append(step.id).append(' ').append(canon);
+        }
+        return lines.toString();
+    }
+
     private static List<String[]> headerRename(List<String[]> headers, Map<String, Object> op, String direction) {
         String from = String.valueOf("up".equals(direction) ? op.get("from") : op.get("to"));
         String to = String.valueOf("up".equals(direction) ? op.get("to") : op.get("from"));
@@ -879,23 +1050,33 @@ public final class Engine {
         return out;
     }
 
-    private static String classify(Bundle bundle, String date) {
-        if (bundle.dates.contains(date)) return date;
+    private static String classify(Bundle bundle, String date, String headerName) {
+        if (bundle.dates.contains(date)) {
+            for (VersionInfo info : bundle.versionInfo) {
+                if (!info.date().equals(date) || !info.sunsetEnforce() || info.sunset() == null || info.sunset().isBlank()) continue;
+                if (info.sunset().compareTo(bundle.now()) < 0) {
+                    throw new ApiversaException("AV-E012", "up", bundle.dates, List.of(
+                            new String[] {"Link", "</apiversa/upgrade>; rel=\"sunset\""},
+                            new String[] {headerName, date}));
+                }
+            }
+            return date;
+        }
         if (DATE.matcher(date).matches() && date.compareTo(bundle.oldest) < 0) {
             throw new ApiversaException("AV-E012", "up", bundle.dates, java.util.Collections.singletonList(new String[] {"Link", "</apiversa/upgrade>; rel=\"sunset\""}));
         }
         throw ApiversaException.fail("AV-E002", "up", bundle.dates);
     }
 
-    private static String applyDefault(Bundle bundle, String clientId) {
-        if ("latest".equals(bundle.policy)) return bundle.head;
-        if ("oldest".equals(bundle.policy)) return bundle.oldest;
+    private static Decision applyDefault(Bundle bundle, String clientId, String headerName) {
+        if ("latest".equals(bundle.policy)) return new Decision(bundle.head, "default");
+        if ("oldest".equals(bundle.policy)) return new Decision(bundle.oldest, "default");
         if (bundle.pins == null) throw ApiversaException.fail("AV-E005", "startup");
         if (clientId == null) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
         String existing = bundle.pins.get(clientId);
-        if (existing != null) return classify(bundle, existing);
+        if (existing != null) return new Decision(classify(bundle, existing, headerName), "pin");
         bundle.pins.set(clientId, bundle.head);
-        return bundle.head;
+        return new Decision(bundle.head, "pin");
     }
 
     @SuppressWarnings("unchecked")

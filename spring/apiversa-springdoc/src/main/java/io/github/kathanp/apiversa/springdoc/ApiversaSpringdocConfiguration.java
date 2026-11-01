@@ -1,7 +1,6 @@
 package io.github.kathanp.apiversa.springdoc;
 
 import io.github.kathanp.apiversa.Engine;
-import io.swagger.v3.oas.models.info.Info;
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -20,10 +19,7 @@ public class ApiversaSpringdocConfiguration {
             factory.registerSingleton(name, GroupedOpenApi.builder()
                     .group(date)
                     .pathsToMatch("/**")
-                    .addOpenApiCustomizer(openApi -> {
-                        if (openApi.getInfo() == null) openApi.setInfo(new Info());
-                        openApi.getInfo().setVersion(date);
-                    })
+                    .addOpenApiCustomizer(openApi -> ApiversaOpenApi.customize(openApi, bundle, date))
                     .build());
         }
     }

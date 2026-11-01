@@ -17,11 +17,12 @@ export function apiversa(av: Apiversa): FastifyPluginAsync {
     fastify.addHook('preValidation', async (req, reply) => {
       const decl = declaration(req);
       if (!decl) return;
-      const version = safeVersion(av, req, reply);
-      if (!version) return;
+      const decision = safeVersion(av, req, reply);
+      if (!decision) return;
+      const version = decision.version;
       (req as unknown as Record<symbol, string>)[versionKey] = version;
-      for (const header of av.deprecationHeaders(version)) reply.header(header.name, header.value);
-      av.note(version);
+      for (const header of [...decision.headers, ...av.deprecationHeaders(version)]) reply.header(header.name, header.value);
+      av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${req.method} ${req.url.split('?')[0]}` });
       if (!decl.body || av.planIsEmpty(version, decl.body, 'up')) return;
       const prepared = av.prepare('up', {
         schema: decl.body,
@@ -62,9 +63,9 @@ function declaration(req: FastifyRequest): RouteDecl | undefined {
   return req.routeOptions.config?.apiversa;
 }
 
-function safeVersion(av: Apiversa, req: FastifyRequest, reply: FastifyReply): string | undefined {
+function safeVersion(av: Apiversa, req: FastifyRequest, reply: FastifyReply): ReturnType<Apiversa['resolveDecision']> | undefined {
   try {
-    return av.resolveVersion({ headers: req.headers as Record<string, string | string[] | undefined>, request: req });
+    return av.resolveDecision({ headers: req.headers as Record<string, string | string[] | undefined>, request: req, path: req.url });
   } catch (error) {
     if (error instanceof ApiversaError && error.status) {
       for (const header of error.headers) reply.header(header.name, header.value);

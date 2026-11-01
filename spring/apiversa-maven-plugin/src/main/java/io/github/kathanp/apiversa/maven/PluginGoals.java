@@ -95,6 +95,37 @@ public final class PluginGoals {
         return out.toString();
     }
 
+    /** Changes between each older date and head, in chain order. Descriptions come from the change files. */
+    public static String matrix(Path dir, String today) {
+        Engine.Bundle bundle = load(dir, today);
+        Map<String, Object> versions = new LinkedHashMap<>();
+        for (String date : bundle.dates()) {
+            List<Engine.Change> changes = new ArrayList<>();
+            for (Engine.Change change : bundle.changes()) if (change.version().compareTo(date) > 0) changes.add(change);
+            changes.sort(java.util.Comparator.comparing(Engine.Change::version).thenComparing(Engine.Change::id));
+            List<Map<String, String>> rows = new ArrayList<>();
+            for (Engine.Change change : changes) {
+                Map<String, String> row = new LinkedHashMap<>();
+                row.put("id", change.version() + "." + change.id());
+                row.put("description", change.description());
+                rows.add(row);
+            }
+            versions.put(date, rows);
+        }
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("head", bundle.head());
+        document.put("versions", versions);
+        return Json.encode(Json.fromPlain(document, "down"), "down");
+    }
+
+    /**
+     * Each step between two dates and the canonical body after it.
+     * Equal dates return an empty string. A bad body throws {@link ApiversaException}.
+     */
+    public static String diff(Path dir, String schema, String from, String to, String bodyText, String today) {
+        return Engine.diffText(load(dir, today), schema, from, to, bodyText);
+    }
+
     public static Path lock(Path dir) throws IOException {
         Map<String, String> files = new TreeMap<>();
         try (var stream = Files.list(dir)) {

@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-31",
+  "machine": "darwin arm64",
+  "cases": {
+    "Head-version request overhead": {
+      "p50Us": 1.4579999999995152
+    },
+    "One change, 10 KB JSON downgrade": {
+      "p50Us": 64.58299999999895
+    },
+    "Startup with 50 change files": {
+      "p50Ms": 13.914957999999999
+    }
+  }
+}

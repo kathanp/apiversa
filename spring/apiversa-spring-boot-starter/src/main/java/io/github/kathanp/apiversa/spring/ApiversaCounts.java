@@ -11,6 +11,7 @@ public final class ApiversaCounts implements ApiversaUsage {
     private final Map<String, AtomicLong> requests = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> conversions = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> clients = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> unpinned = new ConcurrentHashMap<>();
 
     @Override
     public void record(String version, String clientId, List<String> changeIds) {
@@ -29,6 +30,15 @@ public final class ApiversaCounts implements ApiversaUsage {
 
     public Map<String, Long> requestsByClient() {
         return snapshot(clients);
+    }
+
+    @Override
+    public void recordUnpinned(String version) {
+        unpinned.computeIfAbsent(version, key -> new AtomicLong()).incrementAndGet();
+    }
+
+    public Map<String, Long> unpinnedByVersion() {
+        return snapshot(unpinned);
     }
 
     /** Versions with no requests in this process, and changes used only by those versions. The window is 30 days of process-local counts. */

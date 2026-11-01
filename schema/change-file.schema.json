@@ -29,7 +29,8 @@
             "properties": {
               "date": { "$ref": "#/$defs/date" },
               "deprecated": { "type": "boolean" },
-              "sunset": { "$ref": "#/$defs/date" }
+              "sunset": { "$ref": "#/$defs/date" },
+              "sunsetEnforce": { "type": "boolean" }
             }
           }
         }
@@ -70,7 +71,11 @@
         { "properties": { "op": { "const": "query.add" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "name": { "$ref": "#/$defs/name" }, "default": {} }, "required": ["method", "path", "name", "default"], "additionalProperties": false },
         { "properties": { "op": { "const": "query.remove" }, "method": { "$ref": "#/$defs/method" }, "path": { "$ref": "#/$defs/routePath" }, "name": { "$ref": "#/$defs/name" } }, "required": ["method", "path", "name"], "additionalProperties": false },
         { "properties": { "op": { "const": "error.shape" }, "code": { "type": "string" }, "status": { "type": "integer", "minimum": 400, "maximum": 599 }, "down": { "type": "object" } }, "required": ["down"], "anyOf": [{ "required": ["code"] }, { "required": ["status"] }], "additionalProperties": false },
-        { "properties": { "op": { "const": "custom" }, "converter": { "$ref": "#/$defs/name" } }, "required": ["converter"], "additionalProperties": false }
+        { "properties": { "op": { "const": "custom" }, "converter": { "$ref": "#/$defs/name" } }, "required": ["converter"], "additionalProperties": false },
+        { "properties": { "op": { "const": "header.add" }, "name": { "type": "string", "minLength": 1 }, "default": { "type": "string" } }, "required": ["name", "default"], "additionalProperties": false },
+        { "properties": { "op": { "const": "header.remove" }, "name": { "type": "string", "minLength": 1 }, "default": { "type": "string" } }, "required": ["name", "default"], "additionalProperties": false },
+        { "properties": { "op": { "const": "link.rewrite" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" }, "from": { "$ref": "#/$defs/routePath" }, "to": { "$ref": "#/$defs/routePath" } }, "required": ["schema", "path", "from", "to"], "additionalProperties": false },
+        { "properties": { "op": { "const": "field.deprecate" }, "schema": { "$ref": "#/$defs/name" }, "path": { "$ref": "#/$defs/path" } }, "required": ["schema", "path"], "additionalProperties": false }
       ]
     }
   }

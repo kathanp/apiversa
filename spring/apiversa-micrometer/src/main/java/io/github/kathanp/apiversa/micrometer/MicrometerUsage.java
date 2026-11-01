@@ -26,4 +26,9 @@ public final class MicrometerUsage implements ApiversaUsage {
             Counter.builder("apiversa.conversions").tag("change", id).register(registry).increment();
         }
     }
+
+    @Override
+    public void recordUnpinned(String version) {
+        Counter.builder("apiversa.unpinned").tag("version", version).register(registry).increment();
+    }
 }

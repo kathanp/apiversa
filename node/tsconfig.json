@@ -7,6 +7,13 @@
     { "path": "packages/fastify" },
     { "path": "packages/nest" },
     { "path": "packages/hono" },
-    { "path": "packages/pin-redis" }
+    { "path": "packages/pin-redis" },
+    { "path": "packages/otel" },
+    { "path": "packages/next" },
+    { "path": "packages/koa" },
+    { "path": "packages/client" },
+    { "path": "packages/pin-postgres" },
+    { "path": "packages/json-schema" },
+    { "path": "packages/react" }
   ]
 }

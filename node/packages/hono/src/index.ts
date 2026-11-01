@@ -22,9 +22,10 @@ export function route(av: Apiversa, decl: RouteDecl): MiddlewareHandler<Apiversa
     const url = new URL(c.req.url);
     let version: string;
     try {
-      version = av.resolveVersion({ headers: headerMap(c), request: c.req.raw });
-      for (const header of av.deprecationHeaders(version)) c.header(header.name, header.value);
-      av.note(version);
+      const decision = av.resolveDecision({ headers: headerMap(c), request: c.req.raw, path: url.pathname });
+      version = decision.version;
+      for (const header of [...decision.headers, ...av.deprecationHeaders(version)]) c.header(header.name, header.value);
+      av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${c.req.method} ${url.pathname}` });
     } catch (error) {
       if (error instanceof ApiversaError) return c.json(error.envelope(), (error.status ?? 500) as 400);
       throw error;

@@ -2,6 +2,82 @@
 
 One section per track and version. The agent adds one line per finished roadmap ID while building (`- <ID> <title>`). A release renames `(unreleased)` to the release date.
 
+## node 0.19.0 (unreleased)
+
+- DBG-05 Step diff
+- OBS-02 Unpinned counter
+- DOC-07 Upgrade matrix
+
+## spring 0.13.0 (unreleased)
+
+- DBG-05 Step diff
+- OBS-02 Unpinned counter
+- DOC-07 Upgrade matrix
+
+## node 0.18.0 (unreleased)
+
+- CORE-21 Discriminator binding
+- EVT-04 Upgrade an incoming event
+- DOC-06 Webhooks in per-version OpenAPI
+
+## spring 0.12.0 (unreleased)
+
+- CORE-21 Discriminator binding
+- EVT-04 Upgrade an incoming event
+- DOC-06 Webhooks in per-version OpenAPI
+
+## node 0.17.0 (unreleased)
+
+- CORE-18 Header add and remove
+- CORE-19 Link rewrite
+- CORE-20 Field deprecation marker
+
+## spring 0.11.0 (unreleased)
+
+- CORE-18 Header add and remove
+- CORE-19 Link rewrite
+- CORE-20 Field deprecation marker
+
+## node 0.16.0 (unreleased)
+
+- CORE-16 Response version header
+- CORE-17 Unpinned-client header
+- LIFE-08 Sunset enforcement
+
+## spring 0.10.0 (unreleased)
+
+- CORE-16 Response version header
+- CORE-17 Unpinned-client header
+- LIFE-08 Sunset enforcement
+
+## node 0.15.0 (unreleased)
+
+- CLIENT-01 Typed client
+- CLIENT-02 React hook
+- SHR-03 Cross-implementation gate
+- DOC-05 Type diff per version
+
+## node 0.14.0 (unreleased)
+
+- FW-05 Next.js adapter
+- FW-06 Koa adapter
+- TYPE-05 TypeBox and JSON Schema
+- TEST-07 Traffic replay
+
+## node 0.13.0 (unreleased)
+
+- LIFE-03 Safe-to-remove report
+- LIFE-04 Retire a version
+- LIFE-06 Pin upgrade with preview
+- LIFE-07 Postgres pin store
+
+## node 0.12.0 (unreleased)
+
+- OBS-01 Tracing
+- DBG-02 Explain
+- DBG-03 Logging hook
+- PERF-03 Benchmark script
+
 ## node 0.1.0 (unreleased)
 
 - CORE-01 Version bundle
@@ -144,6 +220,12 @@ One section per track and version. The agent adds one line per finished roadmap 
 
 - SHR-03 Cross-implementation gate
 - TEST-07 Traffic replay
+
+## node 0.11.0 (unreleased)
+
+- ADOPT-01 Existing /v1, /v2
+- ADOPT-03 Eject
+- DOC-04 Upgrade guide per client
 
 ## node 0.10.0 (unreleased)
 

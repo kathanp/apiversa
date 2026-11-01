@@ -10,7 +10,7 @@ import { parseYaml } from '../yaml/parse.js';
 
 export type Policy = 'latest' | 'oldest' | 'pin-on-first-call';
 
-export type VersionInfo = { date: string; deprecated: boolean; sunset?: string };
+export type VersionInfo = { date: string; deprecated: boolean; sunset?: string; sunsetEnforce?: boolean };
 
 export type Bundle = {
   head: string;
@@ -24,13 +24,15 @@ export type Bundle = {
   pins?: PinStore;
   oversize: 'error' | 'passthrough';
   versionInfo: VersionInfo[];
+  /** UTC date used for sunset enforcement. Tests set this so they do not read the clock. */
+  now: string;
 };
 
 const DATE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
 
 export function loadBundle(
   dir: string,
-  options?: { today?: string; registry?: Registry; converters?: Record<string, Converter>; limits?: Limits; pins?: PinStore; oversize?: 'error' | 'passthrough' },
+  options?: { today?: string; now?: string; headerName?: string; registry?: Registry; converters?: Record<string, Converter>; limits?: Limits; pins?: PinStore; oversize?: 'error' | 'passthrough' },
 ): Bundle {
   assertReleasedLock(dir);
   const versions = parseYaml(readFileSync(join(dir, 'versions.yaml'), 'utf8'));
@@ -45,9 +47,10 @@ export function loadBundle(
 export function buildBundle(
   versionsDoc: unknown,
   changeDocs: unknown[],
-  options?: { today?: string; registry?: Registry; converters?: Record<string, Converter>; limits?: Limits; pins?: PinStore; oversize?: 'error' | 'passthrough' },
+  options?: { today?: string; now?: string; headerName?: string; registry?: Registry; converters?: Record<string, Converter>; limits?: Limits; pins?: PinStore; oversize?: 'error' | 'passthrough' },
 ): Bundle {
-  const today = options?.today ?? new Date().toISOString().slice(0, 10);
+  const today = options?.today ?? options?.now ?? new Date().toISOString().slice(0, 10);
+  const now = options?.now ?? today;
   assertPaths(changeDocs);
   validateDocument(versionsDoc);
   for (const doc of changeDocs) {
@@ -57,7 +60,7 @@ export function buildBundle(
   const versions = versionsDoc as {
     head: string;
     default?: Policy;
-    versions: { date: string; deprecated?: boolean; sunset?: string }[];
+    versions: { date: string; deprecated?: boolean; sunset?: string; sunsetEnforce?: boolean }[];
   };
   const dates = versions.versions.map((item) => item.date);
   if (new Set(dates).size !== dates.length) throw fail('AV-E001', 'startup', 'duplicate date');
@@ -85,9 +88,18 @@ export function buildBundle(
     seen.add(key);
     if (!dates.includes(file.version)) throw fail('AV-E001', 'startup', `change date ${file.version} is not listed`);
     for (const op of file.changes) {
-      if (op.schema && !(op.schema in registry)) throw fail('AV-E001', 'startup', `unknown schema ${op.schema}`);
+      if (op.schema && Object.keys(registry).length > 0 && !(op.schema in registry)) throw fail('AV-E001', 'startup', `unknown schema ${op.schema}`);
       if (op.op === 'custom' && (!op.converter || !converters[op.converter])) {
         throw fail('AV-E001', 'startup', `missing converter ${op.converter ?? ''}`);
+      }
+      if ((op.op === 'header.add' || op.op === 'header.remove') && typeof op.default !== 'string') {
+        throw fail('AV-E001', 'startup', 'header default must be a string');
+      }
+      if ((op.op === 'header.add' || op.op === 'header.remove') && op.name?.toLowerCase() === (options?.headerName ?? 'Api-Version').toLowerCase()) {
+        throw fail('AV-E001', 'startup', 'cannot add or remove the version header');
+      }
+      if (op.op === 'link.rewrite' && (`${op.from ?? ''}${op.to ?? ''}`.includes('{'))) {
+        throw fail('AV-E001', 'startup', 'link.rewrite uses :param');
       }
     }
     changes.push({ version: file.version, id: file.id, description: file.description, ops: file.changes });
@@ -103,7 +115,8 @@ export function buildBundle(
     limits: options?.limits ?? DEFAULT_LIMITS,
     pins,
     oversize: options?.oversize ?? 'error',
-    versionInfo: versions.versions.map((item) => ({ date: item.date, deprecated: item.deprecated === true, sunset: item.sunset })),
+    versionInfo: versions.versions.map((item) => ({ date: item.date, deprecated: item.deprecated === true, sunset: item.sunset, sunsetEnforce: item.sunsetEnforce === true })),
+    now,
   };
 }
 

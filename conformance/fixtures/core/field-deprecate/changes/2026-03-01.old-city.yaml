@@ -1,0 +1,7 @@
+version: "2026-03-01"
+id: old-city
+description: "Hotel.city is deprecated."
+changes:
+  - op: field.deprecate
+    schema: Hotel
+    path: city

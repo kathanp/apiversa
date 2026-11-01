@@ -44,7 +44,15 @@ public final class ApiversaSchemas {
         List<SchemaField> fields = new ArrayList<>(current == null || current.fields() == null ? List.of() : current.fields());
         fields.removeIf(existing -> existing.name().equals(field.name()));
         fields.add(field);
-        registry.put(name, new SchemaDef(fields));
+        registry.put(name, new SchemaDef(fields, current == null ? Map.of() : current.discriminator(), current == null ? null : current.discriminatorPath()));
+        return this;
+    }
+
+    /** One discriminator on a parent schema. Variant names are schema names. */
+    public ApiversaSchemas discriminator(String name, String path, Map<String, String> mapping) {
+        SchemaDef current = registry.get(name);
+        List<SchemaField> fields = current == null || current.fields() == null ? List.of() : current.fields();
+        registry.put(name, new SchemaDef(fields, mapping, path));
         return this;
     }
 }

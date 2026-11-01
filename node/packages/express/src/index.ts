@@ -39,9 +39,10 @@ export function route(av: Apiversa, decl: RouteDecl): RequestHandler {
     const response = res as unknown as VersionedResponse;
     let version: string;
     try {
-      version = av.resolveVersion({ headers: request.headers, request });
-      for (const header of av.deprecationHeaders(version)) response.setHeader(header.name, header.value);
-      av.note(version);
+      const decision = av.resolveDecision({ headers: request.headers, request, path: request.originalUrl ?? request.path });
+      version = decision.version;
+      for (const header of [...decision.headers, ...av.deprecationHeaders(version)]) response.setHeader(header.name, header.value);
+      av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${request.method} ${request.path}` });
       const emptyUp = !decl.body || av.planIsEmpty(version, decl.body, 'up');
       const emptyDown = !decl.response || av.planIsEmpty(version, decl.response, 'down');
       const type = contentType(request.headers);

@@ -9,7 +9,8 @@ export type OpenApiDocument = {
   openapi?: string;
   info?: { title?: string; version?: string };
   paths?: Record<string, Record<string, unknown>>;
-  components?: { schemas?: Record<string, { properties?: Record<string, { type?: string }>; required?: string[] }> };
+  components?: { schemas?: Record<string, { properties?: Record<string, { type?: string; deprecated?: boolean }>; required?: string[] }> };
+  webhooks?: Record<string, unknown>;
 };
 
 export type VersionPicker = {
@@ -68,8 +69,22 @@ function documentAt(headDoc: OpenApiDocument, headFields: Record<string, HeadFie
   for (const change of newer) {
     for (const op of [...change.ops].reverse()) applyEndpoint(paths, change, op);
   }
-  applySchemas(doc, schemaFieldsAt(headFields, bundle, date));
+  applySchemas(doc, schemaFieldsAt(headFields, bundle, date), deprecatedAt(bundle, date));
   return doc;
+}
+
+function deprecatedAt(bundle: Bundle, date: string): Map<string, Set<string>> {
+  const marks = new Map<string, Set<string>>();
+  for (const change of bundle.changes) {
+    if (change.version > date) continue;
+    for (const op of change.ops) {
+      if (op.op !== 'field.deprecate' || !op.schema || !op.path) continue;
+      const set = marks.get(op.schema) ?? new Set<string>();
+      set.add(op.path);
+      marks.set(op.schema, set);
+    }
+  }
+  return marks;
 }
 
 function applyEndpoint(paths: Record<string, Record<string, unknown>>, change: Change, op: RawOp): void {
@@ -95,14 +110,19 @@ function applyEndpoint(paths: Record<string, Record<string, unknown>>, change: C
   }
 }
 
-function applySchemas(doc: OpenApiDocument, fields: Record<string, HeadField[]>): void {
+function applySchemas(doc: OpenApiDocument, fields: Record<string, HeadField[]>, deprecated: Map<string, Set<string>>): void {
   const schemas = doc.components?.schemas;
   if (!schemas) return;
   for (const [name, shape] of Object.entries(fields)) {
     const schema = schemas[name];
     if (!schema) continue;
-    const properties: Record<string, { type?: string }> = {};
-    for (const field of shape) properties[field.name] = field.type ? { type: field.type } : {};
+    const marks = deprecated.get(name);
+    const properties: Record<string, { type?: string; deprecated?: boolean }> = {};
+    for (const field of shape) {
+      const property: { type?: string; deprecated?: boolean } = field.type ? { type: field.type } : {};
+      if (marks?.has(field.name)) property.deprecated = true;
+      properties[field.name] = property;
+    }
     schema.properties = properties;
     if (Array.isArray(schema.required)) schema.required = schema.required.filter((item) => item in properties);
   }

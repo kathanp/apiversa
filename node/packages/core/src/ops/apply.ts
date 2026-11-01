@@ -1,5 +1,5 @@
 import type { Direction } from '../errors.js';
-import { isArray, isObject, type JValue } from '../json/value.js';
+import { isArray, isObject, type JObject, type JValue } from '../json/value.js';
 import type { Registry } from '../json/parse.js';
 import { MAX_DEPTH } from '../limits.js';
 import { fail } from '../errors.js';
@@ -14,6 +14,7 @@ import { fieldMove } from './fieldMove.js';
 import { fieldRemove } from './fieldRemove.js';
 import { fieldRename } from './fieldRename.js';
 import { fieldType } from './fieldType.js';
+import { linkRewrite } from './linkRewrite.js';
 import { objectWrap } from './objectWrap.js';
 
 export type ApplyContext = {
@@ -34,7 +35,7 @@ export function applyData(value: JValue, schema: string | undefined, op: RawOp, 
   }
   if (!isObject(value)) return value;
   let current: JValue = value;
-  if (op.op !== 'error.shape' && (op.schema === undefined || op.schema === schema)) {
+  if (op.op !== 'error.shape' && schemaSelected(schema, op, value, ctx.registry)) {
     current = applyOnObject(value, schema, op, ctx);
   }
   if (op.op === 'error.shape' && (op.schema === undefined || op.schema === schema) && isObject(current)) {
@@ -58,7 +59,16 @@ export function applyData(value: JValue, schema: string | undefined, op: RawOp, 
   return current;
 }
 
-function applyOnObject(obj: import('../json/value.js').JObject, schema: string | undefined, op: RawOp, ctx: ApplyContext): JValue {
+function schemaSelected(schema: string | undefined, op: RawOp, obj: JObject, registry: Registry): boolean {
+  if (op.schema === undefined || op.schema === schema) return true;
+  const disc = schema ? registry[schema]?.discriminator : undefined;
+  if (!disc) return false;
+  const leaf = obj.values.get(disc.path);
+  if (typeof leaf !== 'string') return false;
+  return disc.mapping[leaf] === op.schema;
+}
+
+function applyOnObject(obj: JObject, schema: string | undefined, op: RawOp, ctx: ApplyContext): JValue {
   switch (op.op) {
     case 'field.rename':
       fieldRename(obj, op, ctx.when);
@@ -86,6 +96,11 @@ function applyOnObject(obj: import('../json/value.js').JObject, schema: string |
       return obj;
     case 'object.wrap':
       objectWrap(obj, op, ctx.when);
+      return obj;
+    case 'link.rewrite':
+      linkRewrite(obj, op, ctx.when);
+      return obj;
+    case 'field.deprecate':
       return obj;
     case 'custom':
       return customOp(obj, op, ctx.when, ctx.converters, ctx.registry, schema, ctx.development, ctx.change);

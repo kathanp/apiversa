@@ -7,6 +7,7 @@ import { planFor, type Planned } from '../bundle/load.js';
 import type { HeaderPair, QueryPair } from '../model.js';
 import { applyData } from '../ops/apply.js';
 import { decideRoute } from '../ops/endpoint.js';
+import { headerAdd, headerRemove } from '../ops/headerChange.js';
 import { headerRename } from '../ops/headerRename.js';
 import { queryAdd } from '../ops/queryAdd.js';
 import { queryRemove } from '../ops/queryRemove.js';
@@ -26,6 +27,7 @@ export type ExecuteInput = {
   errorCode?: string;
   development?: boolean;
   trace?: boolean;
+  onConvert?: (event: { change: string; direction: Direction; ms: number }) => void;
 };
 
 export type ExecuteResult = {
@@ -72,25 +74,45 @@ export function execute(bundle: Bundle, input: ExecuteInput, direction: Directio
       if (isBodyOp(step.op.op) && appliesTo(bundle.registry, input.schema, step.op.schema)) {
         if (step.op.op === 'error.shape') {
           if (input.isError || (status !== undefined && status >= 400)) {
-            current = applyData(current, input.schema, step.op, context(bundle, direction, input, status, step), 0);
+            touch(input, step, direction, () => {
+              current = applyData(current, input.schema, step.op, context(bundle, direction, input, status, step), 0);
+            });
           }
         } else if (!input.isError && !(status !== undefined && status >= 400 && direction === 'down')) {
-          current = applyData(current, input.schema, step.op, context(bundle, direction, input, status, step), 0);
+          touch(input, step, direction, () => {
+            current = applyData(current, input.schema, step.op, context(bundle, direction, input, status, step), 0);
+          });
         }
       } else if (step.op.op.startsWith('query.')) {
-        query = applyQuery(query, step.op, direction);
-      } else if (step.op.op === 'header.rename') {
-        headers = headerRename(headers, step.op, direction);
+        touch(input, step, direction, () => {
+          query = applyQuery(query, step.op, direction);
+        });
+      } else if (step.op.op.startsWith('header.')) {
+        touch(input, step, direction, () => {
+          headers = applyHeader(headers, step.op, direction);
+        });
       } else if (step.op.op === 'status.change') {
-        status = statusChange(status, step.op, direction);
+        touch(input, step, direction, () => {
+          status = statusChange(status, step.op, direction);
+        });
       }
     }
     body = materialize(current, input.schema, bundle.registry);
   } else {
     for (const step of steps) {
-      if (step.op.op.startsWith('query.')) query = applyQuery(query, step.op, direction);
-      else if (step.op.op === 'header.rename') headers = headerRename(headers, step.op, direction);
-      else if (step.op.op === 'status.change') status = statusChange(status, step.op, direction);
+      if (step.op.op.startsWith('query.')) {
+        touch(input, step, direction, () => {
+          query = applyQuery(query, step.op, direction);
+        });
+      } else if (step.op.op.startsWith('header.')) {
+        touch(input, step, direction, () => {
+          headers = applyHeader(headers, step.op, direction);
+        });
+      } else if (step.op.op === 'status.change') {
+        touch(input, step, direction, () => {
+          status = statusChange(status, step.op, direction);
+        });
+      }
     }
   }
   return finish(bundle, input, direction, steps, { body, path: route.path, query, headers, status, legacyHandler: route.legacyHandler, parsed });
@@ -146,11 +168,29 @@ export function bodyPlanEmpty(bundle: Bundle, version: string, schema: string | 
 }
 
 function isBodyOp(op: string): boolean {
-  return op.startsWith('field.') || op.startsWith('enum.') || op === 'object.wrap' || op === 'custom' || op === 'error.shape';
+  if (op === 'field.deprecate') return false;
+  return op.startsWith('field.') || op.startsWith('enum.') || op === 'object.wrap' || op === 'custom' || op === 'error.shape' || op === 'link.rewrite';
 }
 
 function isMeta(op: string): boolean {
-  return op.startsWith('query.') || op === 'header.rename' || op === 'status.change';
+  return op.startsWith('query.') || op.startsWith('header.') || op === 'status.change';
+}
+
+function applyHeader(headers: HeaderPair[], op: Planned['op'], direction: Direction): HeaderPair[] {
+  if (op.op === 'header.add') return headerAdd(headers, op, direction);
+  if (op.op === 'header.remove') return headerRemove(headers, op, direction);
+  if (op.op === 'header.rename') return headerRename(headers, op, direction);
+  return headers;
+}
+
+function touch(input: ExecuteInput, step: Planned, direction: Direction, run: () => void): void {
+  if (!input.onConvert) {
+    run();
+    return;
+  }
+  const start = performance.now();
+  run();
+  input.onConvert({ change: `${step.version}.${step.id}`, direction, ms: performance.now() - start });
 }
 
 function isBodyStep(step: Planned, input: ExecuteInput, direction: Direction): boolean {
@@ -170,6 +210,8 @@ function mentions(registry: Registry, root: string, target: string, seen = new S
   if (root === target) return true;
   if (seen.has(root)) return false;
   seen.add(root);
+  const disc = registry[root]?.discriminator;
+  if (disc && Object.values(disc.mapping).includes(target)) return true;
   const fields = registry[root]?.fields;
   if (!fields) return false;
   return fields.some((field) => (field.schema && mentions(registry, field.schema, target, seen)) || (field.items && mentions(registry, field.items, target, seen)));

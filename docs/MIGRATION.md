@@ -20,7 +20,7 @@ versions:
 default: oldest
 ```
 
-## Step 2 — Map the old prefixes (ADOPT-01, planned node 0.11.0)
+## Step 2 — Map the old prefixes (ADOPT-01)
 
 ```ts
 createApiversa({ dir: './api-versions', legacyPrefixes: { '/v1': '2025-01-01', '/v2': '2025-09-01' } });
@@ -47,4 +47,11 @@ Add `apiversa check` to CI so a breaking change without a change file fails the 
 
 ## Leaving
 
-`apiversa eject` (planned node 0.11.0) writes all changes as plain functions and explicit routing code. You can stop using apiversa without rewriting anything.
+`apiversa eject` writes `ejected/changes.mjs` and `ejected/routes.mjs`: one `up` and one `down` function per change, and the endpoint list. The files do not import apiversa.
+
+```bash
+npx apiversa eject ./api-versions --out ./ejected
+npx apiversa upgrade-guide --from 2025-01-01 ./api-versions
+```
+
+The upgrade guide lists every change newer than that date, grouped by endpoint.

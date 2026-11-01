@@ -274,7 +274,8 @@ export function toPlain(value: JValue, schema: string | undefined, registry: Reg
 }
 
 export type SchemaField = { name: string; schema?: string; items?: string };
-export type SchemaDef = { fields?: SchemaField[] };
+export type Discriminator = { path: string; mapping: Record<string, string> };
+export type SchemaDef = { fields?: SchemaField[]; discriminator?: Discriminator };
 export type Registry = Record<string, SchemaDef>;
 
 export function orderKeys(obj: JObject, def: SchemaDef | undefined): string[] {

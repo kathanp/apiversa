@@ -1,17 +1,18 @@
 import type { Direction } from './errors.js';
 import { ApiversaError, fail } from './errors.js';
 import { loadBundle, planFor, type Bundle } from './bundle/load.js';
-import { deprecationHeaders, memoryPins, Usage, type CountSnapshot, type MetricPoint } from './lifecycle.js';
+import { clientHeaders, deprecationHeaders, memoryPins, Usage, type CountSnapshot, type MetricPoint, type SafeToRemove } from './lifecycle.js';
 import { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
 
 export type { ClientField, ClientIssue, SchemaParser };
 export { memoryPins };
-export type { CountSnapshot, MetricPoint };
+export type { CountSnapshot, MetricPoint, SafeToRemove };
+export type { VersionSource };
 import { bodyPlanEmpty, execute, type ExecuteResult } from './chain/run.js';
 import { DEFAULT_LIMITS } from './limits.js';
 import type { Converter, HeaderPair, PinStore, QueryPair } from './model.js';
 import type { Registry } from './json/parse.js';
-import { readHeader, resolveVersion, type HeaderInput } from './resolve/version.js';
+import { readHeader, resolveDecision, resolveVersion, type HeaderInput, type VersionSource } from './resolve/version.js';
 
 export type { Registry, SchemaDef, SchemaField } from './json/parse.js';
 export type { Converter, PinStore, QueryPair, HeaderPair } from './model.js';
@@ -53,11 +54,19 @@ export type CreateOptions = {
   development?: boolean;
   /** Called with the in-memory counters after each noted request. The hook must not be used to open a socket inside apiversa. */
   onCount?: (snapshot: CountSnapshot) => void;
+  /** Called after each applied change. The hook must not open a socket. */
+  onConvert?: (event: { change: string; direction: Direction; ms: number }) => void;
+  /** UTC date for sunset enforcement. Tests set this and do not read the clock. */
+  now?: string;
+  /** Old URL prefixes mapped to dates, for example `{ '/v1': '2025-10-01' }`. A version header and a resolver both win over a prefix. */
+  legacyPrefixes?: Record<string, string>;
 };
 
 export type Apiversa = {
   /** Resolve the client version: header, host resolver, then the bundle default. */
-  resolveVersion(input: { headers?: HeaderInput; request?: unknown; clientId?: string }): string;
+  resolveVersion(input: { headers?: HeaderInput; request?: unknown; clientId?: string; path?: string }): string;
+  /** Same resolution as {@link Apiversa.resolveVersion}, plus which rule won and the response headers to set. */
+  resolveDecision(input: { headers?: HeaderInput; request?: unknown; clientId?: string; path?: string }): { version: string; source: VersionSource; headers: { name: string; value: string }[] };
   /** Upgrade a request body to head. Returns the original reference when the plan is empty. */
   convertRequest(input: ConvertInput): unknown;
   /** Downgrade a response body from head. Returns the original reference when the plan is empty. */
@@ -74,10 +83,18 @@ export type Apiversa = {
   downgradeEvent(payload: unknown, schema: string, version: string): unknown;
   /** Downgrade using the subscriber's pin. A missing pin is AV-E002. */
   downgradeForSubscriber(payload: unknown, schema: string, subscriberId: string): unknown;
+  /** Incoming event brought up to head. Same `up` chain as a request. */
+  upgradeEvent(payload: unknown, schema: string, version: string): unknown;
   /** Deprecation, Sunset, and Link for a deprecated version. Empty when it is not deprecated. */
   deprecationHeaders(version: string): { name: string; value: string }[];
   /** Count one request. A client id is counted only when the caller has one. */
-  note(version: string, clientId?: string): void;
+  note(version: string, clientId?: string, extra?: { unpinned?: boolean; endpoint?: string }): void;
+  /** Versions and changes with no requests in this process. */
+  safeToRemove(): SafeToRemove;
+  /** Changes between the client's pin and `toDate`, with one before/after sample. */
+  previewUpgrade(clientId: string, toDate: string, sample?: unknown, schema?: string): { from: string; to: string; endpoints: { path: string; changes: { id: string; description: string; before: unknown; after: unknown }[] }[] };
+  /** Move a pin forward. A backwards move needs `allowDowngrade`. `dryRun` does not write. */
+  upgradePin(clientId: string, toDate: string, options?: { dryRun?: boolean; allowDowngrade?: boolean }): string;
   /** In-memory request, conversion, and client counts. */
   stats(): CountSnapshot;
   /** Prometheus text. The host scrapes it. apiversa does not send it. */
@@ -103,13 +120,15 @@ export function createApiversa(options: CreateOptions): Apiversa {
       maxArrayItems: options.maxArrayItems ?? DEFAULT_LIMITS.maxArrayItems,
     },
     oversize: options.oversize,
+    now: options.now,
+    headerName: options.header,
   });
-  return api(bundle, { header: options.header ?? 'Api-Version', resolve: options.resolve, development, trace, usage, onCount: options.onCount });
+  return api(bundle, { header: options.header ?? 'Api-Version', resolve: options.resolve, development, trace, usage, onCount: options.onCount, onConvert: options.onConvert, legacyPrefixes: options.legacyPrefixes });
 }
 
 export function api(
   bundle: Bundle,
-  opts: { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean; usage?: Usage; onCount?: (snapshot: CountSnapshot) => void },
+  opts: { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean; usage?: Usage; onCount?: (snapshot: CountSnapshot) => void; onConvert?: (event: { change: string; direction: Direction; ms: number }) => void; legacyPrefixes?: Record<string, string> },
 ): Apiversa {
   const usage = opts.usage ?? new Usage();
   function hostVersion(input: { headers?: HeaderInput; request?: unknown }): string | undefined {
@@ -120,7 +139,7 @@ export function api(
   function prepare(direction: Direction, input: ConvertInput): ExecuteResult {
     const version = input.version
       ? resolveVersion(bundle, { headers: { [opts.header]: input.version }, headerName: opts.header })
-      : resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId });
+      : resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, legacyPrefixes: opts.legacyPrefixes });
     return execute(
       bundle,
       {
@@ -136,13 +155,18 @@ export function api(
         errorCode: input.errorCode,
         development: opts.development,
         trace: opts.trace,
+        onConvert: opts.onConvert,
       },
       direction,
     );
   }
   return {
     resolveVersion(input) {
-      return resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId });
+      return resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, legacyPrefixes: opts.legacyPrefixes });
+    },
+    resolveDecision(input) {
+      const decision = resolveDecision(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, legacyPrefixes: opts.legacyPrefixes });
+      return { ...decision, headers: clientHeaders(opts.header, decision.version, decision.source) };
     },
     convertRequest(input) {
       return prepare('up', input).body;
@@ -168,13 +192,45 @@ export function api(
       if (!bundle.pins || !subscriberId || !pinned) throw fail('AV-E002', 'down', 'no pin for subscriber', bundle.dates);
       return prepare('down', { schema, body: payload, version: pinned }).body;
     },
+    upgradeEvent(payload, schema, version) {
+      return prepare('up', { schema, body: payload, version }).body;
+    },
     deprecationHeaders(version) {
       return deprecationHeaders(bundle, version);
     },
-    note(version, clientId) {
+    note(version, clientId, extra) {
       const ids = [...new Set(planFor(bundle, version, 'up').map((step) => `${step.version}.${step.id}`))];
-      usage.record(version, clientId, ids);
+      usage.record(version, clientId, ids, extra);
       opts.onCount?.(usage.snapshot());
+    },
+    safeToRemove() {
+      return usage.safeToRemove(bundle.dates, bundle.changes);
+    },
+    previewUpgrade(clientId, toDate, sample = {}, schema = 'Hotel') {
+      const pin = clientId ? bundle.pins?.get(clientId) : undefined;
+      if (!bundle.pins || !clientId || !pin) throw fail('AV-E002', 'up', 'no pin', bundle.dates);
+      const to = resolveVersion(bundle, { headers: { [opts.header]: toDate }, headerName: opts.header });
+      const changes = bundle.changes
+        .filter((change) => change.version > pin && change.version <= to)
+        .sort((left, right) => left.version.localeCompare(right.version) || left.id.localeCompare(right.id))
+        .map((change) => ({
+          id: `${change.version}.${change.id}`,
+          description: change.description,
+          before: prepare('down', { schema, body: sample, version: pin }).body,
+          after: to === bundle.head ? sample : prepare('down', { schema, body: sample, version: to }).body,
+        }));
+      const paths = usage.pathsFor(clientId);
+      const endpoints = (paths.length > 0 ? paths : ['*']).map((path) => ({ path, changes }));
+      return { from: pin, to, endpoints };
+    },
+    upgradePin(clientId, toDate, options) {
+      if (!bundle.pins || !clientId) throw fail('AV-E002', 'up', 'no pin', bundle.dates);
+      const pin = bundle.pins.get(clientId);
+      if (!pin) throw fail('AV-E002', 'up', 'no pin', bundle.dates);
+      const to = resolveVersion(bundle, { headers: { [opts.header]: toDate }, headerName: opts.header });
+      if (to < pin && !options?.allowDowngrade) throw new Error('Refusing to move a pin backwards without allowDowngrade.');
+      if (!options?.dryRun) bundle.pins.set(clientId, to);
+      return to;
     },
     stats() {
       return usage.snapshot();

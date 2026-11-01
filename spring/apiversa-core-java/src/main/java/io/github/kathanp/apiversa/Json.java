@@ -164,7 +164,15 @@ public final class Json {
 
     public record SchemaField(String name, String schema, String items) {}
 
-    public record SchemaDef(List<SchemaField> fields) {}
+    public record SchemaDef(List<SchemaField> fields, Map<String, String> discriminator, String discriminatorPath) {
+        public SchemaDef {
+            if (discriminator == null) discriminator = Map.of();
+        }
+
+        public SchemaDef(List<SchemaField> fields) {
+            this(fields, Map.of(), null);
+        }
+    }
 
     private static SchemaField field(SchemaDef def, String name) {
         if (def == null || def.fields == null) return null;

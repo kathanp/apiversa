@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: link
+description: "Hotel.url moved from /hotels/:id to /properties/:id."
+changes:
+  - op: link.rewrite
+    schema: Hotel
+    path: url
+    from: /hotels/:id
+    to: /properties/:id

@@ -1,0 +1,12 @@
+{
+  "name": "@apiversa/client",
+  "version": "0.1.0",
+  "description": "Fetch client that sends a pinned Api-Version",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "dependencies": {}
+}

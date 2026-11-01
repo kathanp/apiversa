@@ -31,6 +31,7 @@ import reactor.core.publisher.Mono;
 /** WebFlux version resolution, JSON conversion, and per-line NDJSON or SSE downgrade. */
 public final class ApiversaWebFilter implements WebFilter, Ordered {
     static final String VERSION = "io.github.kathanp.apiversa.version";
+    static final String SOURCE = "io.github.kathanp.apiversa.source";
 
     private final Engine.Bundle bundle;
     private final ApiversaWebFluxProperties properties;
@@ -79,9 +80,10 @@ public final class ApiversaWebFilter implements WebFilter, Ordered {
         if (cached instanceof String text) return text;
         Map<String, List<String>> headers = new LinkedHashMap<>();
         exchange.getRequest().getHeaders().forEach(headers::put);
-        String resolved = Engine.resolve(bundle, headers, properties.getHeader(), null, null);
-        exchange.getAttributes().put(VERSION, resolved);
-        return resolved;
+        Engine.Decision decision = Engine.resolveDecision(bundle, headers, properties.getHeader(), null, null);
+        exchange.getAttributes().put(VERSION, decision.version());
+        exchange.getAttributes().put(SOURCE, decision.source());
+        return decision.version();
     }
 
     static byte[] encode(Object body) {
@@ -164,7 +166,9 @@ final class VersionedResponse extends ServerHttpResponseDecorator {
         if (!ApiversaWebFilter.relevant(exchange)) return super.writeWith(body);
         try {
             String version = ApiversaWebFilter.version(exchange, bundle, properties);
+            Object source = exchange.getAttribute(ApiversaWebFilter.SOURCE);
             getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
+            for (String[] header : Engine.versionHeaders(properties.getHeader(), new Engine.Decision(version, source instanceof String text ? text : "header"))) getHeaders().set(header[0], header[1]);
             for (String[] header : Engine.deprecationHeaders(bundle, version)) getHeaders().set(header[0], header[1]);
             MediaType type = getHeaders().getContentType();
             String schema = ApiversaWebFilter.schema(ApiversaWebFilter.handler(exchange), ApiversaResponse.class);

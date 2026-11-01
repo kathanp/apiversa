@@ -5,7 +5,7 @@
 | Product         | `apiversa` — Stripe-style, date-based API versioning for Node.js and Spring                        |
 | npm             | `apiversa` (core) and `@apiversa/*` (adapters). Name was free on npm on 2026-10-30. Trademark search not done |
 | Maven           | `io.github.kathanp:apiversa-spring` (namespace must be verified on Maven Central first)           |
-| Spec version    | 1.0, 2026-10-30                                                                                    |
+| Spec version    | 1.0, 2026-10-31                                                                                    |
 | Node runtime    | Node.js ≥ 22. ESM + CJS builds. TypeScript types shipped. Zero runtime dependencies in core        |
 | Java runtime    | Java ≥ 17. Spring Boot 3.3+ and 4.x. Spring MVC first, WebFlux later                               |
 | License         | Apache-2.0                                                                                         |
@@ -146,8 +146,14 @@ Every operation is pure. It reads one JSON value and returns a new one.
 | `query.remove`   | none                                             | drop the parameter if an old client sent it      | `method`, `path`, `name`     |
 | `error.shape`    | expression in `down` on error bodies             | none                                             | `code` or `status`, `down`   |
 | `custom`         | named code converter                             | named code converter                             | `converter`                  |
+| `header.add`     | remove the response header when its trimmed value equals `default` | set `default` on the request when the header is absent; an empty value stays empty | `name`, `default` |
+| `header.remove`  | set `default` on the response when the header is absent | drop the request header when it is present, including an empty value | `name`, `default` |
+| `link.rewrite`   | rewrite a string that matches `to` back to `from` | rewrite a string that matches `from` to `to`     | `schema`, `path`, `from`, `to` |
+| `field.deprecate`| none                                             | none                                             | `schema`, `path`             |
 
 An op listed as "none" in one direction is skipped in that direction (B9). Equality in this table is canonical-byte equality (B7). Enum ops leave every non-matching value untouched, including `null` and an absent key.
+
+`header.add`, `header.remove`, `link.rewrite`, and `field.deprecate` join this table when their IDs ship (CORE-18, CORE-19, CORE-20). Until that version, a change file that uses one of them fails startup with `AV-E001`, and `schema/change-file.schema.json` does not list them. Header equality is trimmed string equality, not JSON bytes (B12, B10). `field.deprecate` is "none" in both directions: the body plan skips it, and OpenAPI and the changelog still read it.
 
 ## B5. Paths and expressions
 
@@ -184,6 +190,7 @@ A change names a **schema** (`Hotel`), not a route. The registry is a graph of n
 - A JSON object the graph does not name is still addressable by a path (B5). Ops for a named schema do not run on it.
 - Cycles in the graph are allowed (`Hotel.parent` is a `Hotel`). JSON values are trees. The walk stops at 32 segments (`AV-E004`).
 - When a schema has no field list (a conformance case that omits `fields`), that object keeps input key order, and a key created by an op is appended.
+- A schema may store one discriminator when CORE-21 has shipped: a path plus a map from string values to schema names. Variant changes run only for the matching name. Until that ID ships, registries have no discriminator field.
 
 ## B7. Canonical JSON
 
@@ -231,6 +238,10 @@ A missing key and JSON `null` are different. `null` is a present value.
 | `query.add` | set `default` | — | an empty parameter value stays empty; it is not `default` |
 
 `field.add` round-trips absent ↔ `default`, and round-trips `null`. It does not round-trip a client that sent a value whose canonical bytes equal `default`: `down` removes that key. `field.remove` restores `default`, not the client's original value.
+
+`header.add` and `header.remove` follow that same absent and present table once CORE-18 has shipped. A missing header is "absent." Headers have no JSON `null`. An empty header value is present and is not replaced by `default`. Comparison is the trimmed value. The name written is the spelling in the change file.
+
+`link.rewrite` (CORE-19) rewrites a string that matches the route pattern and leaves every other JSON value, including `null` and an absent key, unchanged. `field.deprecate` (CORE-20) does not change the body.
 
 `object.wrap` on `up` moves each listed key that is present, including a key whose value is `null`, under `into`, and omits listed keys that are absent. On `down`, keys inside `into` move back to the parent. An absent `into` is a no-op. An `into` whose value is `null` is `AV-E016`.
 
@@ -331,6 +342,42 @@ When the head schema rejects an upgraded request, the error paths are translated
 - Done when: a rename, a move, and a nested array path each map back correctly; an error on a field that does not exist in the old version is reported under `_head` with the head path.
 - Refuses: returning a head-only path as if the client had sent that field.
 
+#### CORE-16 — Response version header
+The response writes the resolved date on the version header (the configured name, default `Api-Version`). The spelling is the name from options, not the case the client sent.
+- Written on a successful response, and on any HTTP error where a bundle date was chosen, including `AV-E010`, `AV-E011`, and `AV-E012`.
+- Omitted when no date was chosen (`AV-E002`).
+- An empty body plan still does not parse the body (PERF-01). Setting this header is not a body parse.
+- Done when: an explicit date is echoed; the default-policy date is echoed; the head date is echoed; an `AV-E002` response has no version header; a head request does not parse the body.
+- Refuses: writing a date that is not in the bundle, or changing the header value the client sent on the request.
+
+#### CORE-17 — Unpinned-client header
+When the date came from the `default` policy, the response includes `Apiversa-Default` set to that date. When the client sent the version header, or the resolver returned a date, the header is absent. The status code is unchanged. RFC 9111 obsoletes `Warning`, so this is not a `Warning` header.
+- Done when: a request with no version header and no resolver result sets `Apiversa-Default` to the default-policy date; an explicit header does not, even when that date equals the default; a resolver pin does not.
+- Refuses: setting `Apiversa-Default` when the client sent a version header.
+
+#### CORE-18 — Header add and remove
+`header.add` and `header.remove` follow B4 and B10. Names compare case-insensitively (B12). `default` is a string. The target name must not be the configured version header.
+- Done when: an absent request header becomes `default` on the way up; an empty request header stays empty; a response header whose trimmed value equals `default` is removed on the way down for `header.add`; `header.remove` drops a present request header on the way up and sets `default` on the response when the header is absent; one conformance fixture covers each op.
+- Refuses: adding or removing the configured version header, a non-string `default`, or treating header names as case-sensitive. Those files fail startup with `AV-E001`.
+
+#### CORE-19 — Link rewrite
+`link.rewrite` rewrites one string field that holds a path. `path` is a B5 field path. `from` and `to` are route paths using `:param` segments, the same spelling as `endpoint.rename`. A `{param}` spelling fails startup with `AV-E001`.
+- The value's path is split on `/` and matched segment by segment. A `:param` segment captures one non-empty segment. Literals match exactly. Captures are substituted into the destination by parameter name. The query string and the fragment are copied. An absolute URL keeps its scheme, host, and port; only the path is rewritten. No percent-decoding.
+- A non-matching string, a non-string (including `null`), and an absent key are unchanged.
+- Done when: `/hotels/h_1` with `from: /hotels/:id` and `to: /properties/:id` becomes `/properties/h_1` on the way up and the reverse on the way down; `https://api.example/hotels/h_1?x=1` keeps the host and the query; `/other/h_1` and `null` stay as they are; one conformance fixture covers a match and a non-match.
+- Refuses: building a regular expression from `from` or `to`, rewriting the host, or fetching the URL.
+
+#### CORE-20 — Field deprecation marker
+`field.deprecate` names a field that is still present. Neither direction changes the body. The body plan treats the op as skipped (B9). Per-version OpenAPI marks that property `deprecated: true` on versions at or after the change, and not on older versions. The changelog line is the change file's `description`.
+- Done when: the canonical body is unchanged in both directions; the head OpenAPI property is `deprecated: true`; an older document from before the change is not; the changelog includes the description; one conformance fixture expects the input bytes as the output.
+- Refuses: removing the field or changing its value.
+
+#### CORE-21 — Discriminator binding
+A schema may store one discriminator: a B5 path and a map from strings to schema names. Zod reads it from `z.discriminatedUnion` when the discriminator key is a string literal. Spring stores it with `ApiversaSchemas.discriminator(schema, path, mapping)`. The parent schema's field list still orders keys (B7).
+- A change whose schema is a mapped variant runs on a value of the parent schema only when the string at the discriminator path equals that mapping key. A change whose schema is the parent always runs. Unknown, non-string, `null`, and absent discriminator values run the parent changes and skip every variant. That is not an error.
+- Done when: a `card` object gets a `Card` rename and does not get a `BankAccount` rename; a `bank_account` object does the opposite; an unknown `type` gets only the parent changes; an unregistered object is not converted.
+- Refuses: running every variant's ops on one object, or failing the request because the discriminator value is unknown.
+
 ## C2. Types (TYPE)
 
 #### TYPE-01 — Head schemas
@@ -395,6 +442,16 @@ Config output for Scalar and Swagger UI to show all versions in one page with a 
 #### DOC-05 — Type diff per version
 `apiversa changelog --types` adds, for each version, the TypeScript declaration diff of every changed schema, so SDK users see exactly what moved.
 
+#### DOC-06 — Webhooks in per-version OpenAPI
+The head OpenAPI 3.1 document may contain a `webhooks` map. Each per-version document rewinds those payload schemas with the same rules as response schemas (DOC-01). Spring writes that same `webhooks` object into the per-version document.
+- Done when: a `field.rename` on a webhook schema shows the older property name in the older document; a `field.add` omits that property from older documents; a `field.deprecate` (CORE-20) marks the property deprecated only from that version forward; a head document with no `webhooks` key produces none.
+- Refuses: leaving the head property names in an older webhook schema.
+
+#### DOC-07 — Upgrade matrix
+`apiversa matrix` writes `upgrade-matrix.json`. `mvn apiversa:matrix` writes the same bytes. The file has `head` and a `versions` object. Each older date maps to the change ids between that date and head, in B9 `up` order, with each change file's `description`. Head maps to an empty list. `--out` chooses the path. The default path is `upgrade-matrix.json` in the working directory.
+- Done when: the order matches B9 for a two-change bundle; descriptions match the change files; head is `[]`.
+- Refuses: calling the network, or inventing a description that is not in a change file.
+
 ## C5. Webhooks and events (EVT)
 
 #### EVT-01 — Downgrade an outgoing event
@@ -405,6 +462,11 @@ Each webhook subscriber can have its own pinned version through the resolver or 
 
 #### EVT-03 — Message queues
 Same conversion for Kafka, SQS or RabbitMQ message bodies, keyed by a version header on the message. Spring Kafka first (SPR-07).
+
+#### EVT-04 — Upgrade an incoming event
+`upgradeEvent(payload, schema, version)` runs the `up` chain from that version to head, the same chain as `convertRequest`. `downgradeEvent` stays the `down` chain (EVT-01). An unknown date is `AV-E002`. An empty plan returns the original payload and does not parse it (PERF-01). A conversion failure uses the `up` codes in B11 and returns no payload. Node: `av.upgradeEvent`. Spring: `Engine.upgradeEvent`.
+- Done when: an older body becomes the head shape; the head version with an empty plan returns the same bytes; an unknown date is `AV-E002`; a failure returns no payload.
+- Refuses: calling the network, or running the `down` chain when asked to upgrade.
 
 ## C6. Streaming (STR)
 
@@ -468,6 +530,12 @@ Interface `{ get(clientId), set(clientId, date) }`. Memory (core) and Redis (`@a
 #### LIFE-07 — Postgres pin store
 `@apiversa/pin-postgres`, using the host's `pg` pool (peer dependency). One table, created by a migration the host runs.
 
+#### LIFE-08 — Sunset enforcement
+A version entry may set `sunsetEnforce: true` beside `sunset`. The default is false, which keeps LIFE-01: the `Sunset` header is sent and the handler runs. `schema/change-file.schema.json` accepts `sunsetEnforce` when this ID ships. Until then the key is invalid (`AV-E001`).
+When `sunsetEnforce` is true and `sunset` is strictly before the UTC date, a request for that version returns `410` with `AV-E012` and the Sunset link from CORE-02. The date stays in `supportedVersions`. A sunset of today or later does not reject. The engine option `now` is a `YYYY-MM-DD` string. Tests set it. When it is omitted, the engine uses the UTC calendar date at the start of that request.
+- Done when: `sunsetEnforce: true` and a past sunset return `AV-E012`; the same sunset without the flag runs the handler and still sets `Sunset`; `sunsetEnforce: true` and a future sunset run the handler; a test passes `now` and does not read the clock.
+- Refuses: rejecting a version that has `sunset` and does not have `sunsetEnforce: true`.
+
 ## C9. Adoption (ADOPT)
 
 #### ADOPT-01 — Existing `/v1`, `/v2`
@@ -496,11 +564,17 @@ In development, `Apiversa-Trace: 2026-03-01.price-object, 2026-01-15.rename-city
 #### DBG-04 — Doctor
 `apiversa doctor` checks the bundle, change files, locks, drafts, missing converters, schemas no route uses, routes with no declared schema, and pin-store wiring. It prints each problem with its fix and exits non-zero on any error.
 
+#### DBG-05 — Step diff
+`apiversa diff --schema Hotel --from 2025-10-01 --to 2026-03-01 --body body.json` prints the chain between those dates. `mvn apiversa:diff` takes the same `schema`, `from`, `to`, and `body` values. `--to` defaults to head. When `from` is older than `to`, the direction is `up`. When `from` is newer, the direction is `down`. Equal dates print no steps.
+Each step is one line: `<version>.<id>` and the canonical body after that op, in B9 order for the chosen direction. Exit 0 on success. Exit 1 prints the `AV-E` code on stderr and no body. `--out` writes the final canonical bytes. Without `--out`, no file is written.
+- Done when: two changes print two steps in B9 order; equal dates print no steps; a bad body exits 1 with the code; `--out` is the only path that writes a file.
+- Refuses: calling the network, or writing a file when `--out` is absent.
+
 ## C11. Performance (PERF)
 
 #### PERF-01 — Head fast path
 A head-version request reads one header and returns. No body parse, no allocation beyond that. Any route and version whose plan contains zero ops takes the same path (B7). Duplicate keys and pollution keys are checked only on bodies that plan parses.
-- Done when: a head request, and a request whose selected change list is empty, do not parse the body.
+- Done when: a head request, and a request whose selected change list is empty, do not parse the body. Writing the response version header (CORE-16) or `Apiversa-Default` (CORE-17) is not a body parse.
 
 #### PERF-02 — Precompiled plans
 At startup, each (route, version) pair compiles to an immutable list of operations in B9 order. No path parsing at request time. Requests only read the list.
@@ -583,6 +657,11 @@ A release of either library is blocked while any conformance case fails in the o
 #### OBS-01 — Tracing
 `@apiversa/otel`: one OpenTelemetry span per conversion chain with attributes `apiversa.version`, `apiversa.changes`, `apiversa.direction`, and duration. No span on head requests.
 
+#### OBS-02 — Unpinned counter
+LIFE-02's snapshot gains `unpinned`, a count per version of requests whose date came from the `default` policy. An explicit version header does not increment it. A resolver pin does not increment it. Prometheus text adds `apiversa_unpinned_total{version="..."}`. Spring adds a Micrometer meter `apiversa.unpinned` tagged with `version`, and the actuator report includes the same counts. The library still does not send them.
+- Done when: a default-policy request increments `unpinned` for that date; an explicit header does not; a resolver pin does not; `stats()` and the actuator report show the count.
+- Refuses: opening a socket, or counting a request that sent the version header.
+
 ---
 
 # PART D — NODE LIBRARY
@@ -633,7 +712,9 @@ app.post('/bookings', av.route({ body: 'BookingInput', response: 'Booking' }), c
 
 ## D4. CLI
 
-`apiversa init | check | generate | test | changelog | upgrade-guide | explain | lock | retire | eject`
+`apiversa init | check | generate | test | changelog | upgrade-guide | explain | lock | retire | eject | diff | matrix`
+
+`diff` arrives with DBG-05. `matrix` arrives with DOC-07.
 
 ---
 
@@ -761,7 +842,7 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
    - the tarball install test and, after publish, the stranger check pass;
    - no open hard stop and no red run on `next` in the last 24 hours.
 
-## H1. Node track (16 versions)
+## H1. Node track (20 versions)
 
 Each version has one theme. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar. `[x]` after an ID means that ID is implemented and its tests passed. It does not mean the package is published.
 
@@ -845,44 +926,68 @@ Theme: lifecycle.
 
 ### node 0.11.0
 Theme: adopt and leave without pain.
-- **ADOPT-01** Existing /v1, /v2 — Evidence: adoption
-- **ADOPT-03** Eject — Evidence: adoption
-- **DOC-04** Upgrade guide per client — Evidence: stripe
+- **ADOPT-01** [x] Existing /v1, /v2 — Evidence: adoption
+- **ADOPT-03** [x] Eject — Evidence: adoption
+- **DOC-04** [x] Upgrade guide per client — Evidence: stripe
 
 ### node 0.12.0
 Theme: see what it does.
-- **OBS-01** Tracing — Evidence: adoption
-- **DBG-02** Explain — Evidence: adoption
-- **DBG-03** Logging hook — Evidence: adoption
-- **PERF-03** Benchmark script — Evidence: safety
+- **OBS-01** [x] Tracing — Evidence: adoption
+- **DBG-02** [x] Explain — Evidence: adoption
+- **DBG-03** [x] Logging hook — Evidence: adoption
+- **PERF-03** [x] Benchmark script — Evidence: safety
 
 ### node 0.13.0
 Theme: upgrade clients and retire versions.
-- **LIFE-03** Safe-to-remove report — Evidence: adoption
-- **LIFE-04** Retire a version — Evidence: adoption
-- **LIFE-06** Pin upgrade with preview — Evidence: stripe
-- **LIFE-07** Postgres pin store — Evidence: stripe
+- **LIFE-03** [x] Safe-to-remove report — Evidence: adoption
+- **LIFE-04** [x] Retire a version — Evidence: adoption
+- **LIFE-06** [x] Pin upgrade with preview — Evidence: stripe
+- **LIFE-07** [x] Postgres pin store — Evidence: stripe
 
 ### node 0.14.0
 Theme: reach.
-- **FW-05** Next.js adapter — Evidence: adoption
-- **FW-06** Koa adapter — Evidence: adoption
-- **TYPE-05** TypeBox and JSON Schema — Evidence: adoption
-- **TEST-07** Traffic replay — Evidence: safety
+- **FW-05** [x] Next.js adapter — Evidence: adoption
+- **FW-06** [x] Koa adapter — Evidence: adoption
+- **TYPE-05** [x] TypeBox and JSON Schema — Evidence: adoption
+- **TEST-07** [x] Traffic replay — Evidence: safety
 
 ### node 0.15.0
 Theme: clients and Node/Spring parity.
-- **CLIENT-01** Typed client — Evidence: adoption
-- **CLIENT-02** React hook — Evidence: adoption
-- **SHR-03** Cross-implementation gate — Evidence: adoption
-- **DOC-05** Type diff per version — Evidence: adoption
+- **CLIENT-01** [x] Typed client — Evidence: adoption
+- **CLIENT-02** [x] React hook — Evidence: adoption
+- **SHR-03** [x] Cross-implementation gate — Evidence: adoption
+- **DOC-05** [x] Type diff per version — Evidence: adoption
+
+### node 0.16.0
+Theme: tell the client which version it got.
+- **CORE-16** [x] Response version header — Evidence: eval:docs/evals/core-16.md
+- **CORE-17** [x] Unpinned-client header — Evidence: eval:docs/evals/core-17.md
+- **LIFE-08** [x] Sunset enforcement — Evidence: eval:docs/evals/life-08.md
+
+### node 0.17.0
+Theme: headers, links, and deprecation notices.
+- **CORE-18** [x] Header add and remove — Evidence: eval:docs/evals/core-18.md
+- **CORE-19** [x] Link rewrite — Evidence: eval:docs/evals/core-19.md
+- **CORE-20** [x] Field deprecation marker — Evidence: eval:docs/evals/core-20.md
+
+### node 0.18.0
+Theme: polymorphic resources and incoming events.
+- **CORE-21** [x] Discriminator binding — Evidence: eval:docs/evals/core-21.md
+- **EVT-04** [x] Upgrade an incoming event — Evidence: eval:docs/evals/evt-04.md
+- **DOC-06** [x] Webhooks in per-version OpenAPI — Evidence: eval:docs/evals/doc-06.md
+
+### node 0.19.0
+Theme: inspect a body and see who never pinned.
+- **DBG-05** [x] Step diff — Evidence: eval:docs/evals/dbg-05.md
+- **OBS-02** [x] Unpinned counter — Evidence: eval:docs/evals/obs-02.md
+- **DOC-07** [x] Upgrade matrix — Evidence: eval:docs/evals/doc-07.md
 
 ### node 1.0.0
 - API freeze per `docs/STABILITY.md`. No new IDs. Requires at least one production user named in `docs/DECISIONS.md` with their consent. Major release: the agent prepares it and stops.
 
-## H2. Spring track (10 versions)
+## H2. Spring track (14 versions)
 
-Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite.
+Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite. Spring 0.10.0 through 0.13.0 are the same IDs as node 0.16.0 through 0.19.0.
 
 ### spring 0.1.0
 Theme: usable core on Spring MVC, with docs and the CI gate. Same behavior as node 0.1.0. FW-01 and FW-02 are SPR-01 and SPR-04. TYPE-01's ordered fields are the schema registry. TEST-05's helpers are SPR-09.
@@ -954,6 +1059,30 @@ Theme: modern JVM.
 Theme: parity and replay.
 - **SHR-03** [x] Cross-implementation gate — Evidence: adoption
 - **TEST-07** [x] Traffic replay — Evidence: safety
+
+### spring 0.10.0
+Theme: tell the client which version it got. Same IDs as node 0.16.0.
+- **CORE-16** [x] Response version header — Evidence: eval:docs/evals/core-16.md
+- **CORE-17** [x] Unpinned-client header — Evidence: eval:docs/evals/core-17.md
+- **LIFE-08** [x] Sunset enforcement — Evidence: eval:docs/evals/life-08.md
+
+### spring 0.11.0
+Theme: headers, links, and deprecation notices. Same IDs as node 0.17.0.
+- **CORE-18** [x] Header add and remove — Evidence: eval:docs/evals/core-18.md
+- **CORE-19** [x] Link rewrite — Evidence: eval:docs/evals/core-19.md
+- **CORE-20** [x] Field deprecation marker — Evidence: eval:docs/evals/core-20.md
+
+### spring 0.12.0
+Theme: polymorphic resources and incoming events. Same IDs as node 0.18.0.
+- **CORE-21** [x] Discriminator binding — Evidence: eval:docs/evals/core-21.md
+- **EVT-04** [x] Upgrade an incoming event — Evidence: eval:docs/evals/evt-04.md
+- **DOC-06** [x] Webhooks in per-version OpenAPI — Evidence: eval:docs/evals/doc-06.md
+
+### spring 0.13.0
+Theme: inspect a body and see who never pinned. Same IDs as node 0.19.0.
+- **DBG-05** [x] Step diff — Evidence: eval:docs/evals/dbg-05.md
+- **OBS-02** [x] Unpinned counter — Evidence: eval:docs/evals/obs-02.md
+- **DOC-07** [x] Upgrade matrix — Evidence: eval:docs/evals/doc-07.md
 
 ### spring 1.0.0
 - API freeze. Same rule as node 1.0.0. Major release: the agent prepares it and stops.

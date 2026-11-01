@@ -1,0 +1,14 @@
+{
+  "name": "@apiversa/pin-postgres",
+  "version": "0.1.0",
+  "description": "Postgres pin store for apiversa. The host supplies the pool.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "dependencies": {},
+  "peerDependencies": { "pg": ">=8" },
+  "peerDependenciesMeta": { "pg": { "optional": true } }
+}

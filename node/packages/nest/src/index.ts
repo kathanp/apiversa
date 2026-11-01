@@ -48,12 +48,13 @@ export class ApiversaInterceptor implements NestInterceptor {
     const res = http.getResponse<HttpReply>();
     let version: string;
     try {
-      version = this.av.resolveVersion({ headers: req.headers, request: req });
-      for (const header of this.av.deprecationHeaders(version)) {
+      const decision = this.av.resolveDecision({ headers: req.headers, request: req, path: req.url ?? req.path });
+      version = decision.version;
+      for (const header of [...decision.headers, ...this.av.deprecationHeaders(version)]) {
         if (res.setHeader) res.setHeader(header.name, header.value);
         else res.header?.(header.name, header.value);
       }
-      this.av.note(version);
+      this.av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${req.method ?? 'GET'} ${req.path ?? req.url ?? ''}` });
     } catch (error) {
       if (error instanceof ApiversaError) return of(fail(res, error));
       throw error;

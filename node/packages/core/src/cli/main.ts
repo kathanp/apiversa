@@ -1,20 +1,29 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeChangelog } from './changelog.js';
 import { checkBundle } from './check.js';
 import { doctor } from './doctor.js';
+import { eject } from './eject.js';
 import { generate } from './generate.js';
 import { init } from './init.js';
 import { lockFiles } from './lock.js';
 import { testBundle } from './contract.js';
 import { writeOpenApi } from './openapi.js';
+import { diffBody } from './diff.js';
+import { explain } from './explain.js';
+import { writeMatrix } from './matrix.js';
+import { replay } from './replay.js';
+import { retire } from './retire.js';
+import { typeDiff } from './typeDiff.js';
+import { upgradeGuide } from './upgradeGuide.js';
 
-/** `apiversa init|lock|doctor|generate|check|test|openapi|changelog`. Returns the process status. */
+/** `apiversa init|lock|doctor|generate|check|test|openapi|changelog|eject|upgrade-guide`. Returns the process status. */
 export function runCli(argv: string[], cwd = process.cwd()): number {
   const command = argv[2];
   const rest = argv.slice(3);
-  const dir = rest.find((arg) => !arg.startsWith('--')) ?? join(cwd, 'api-versions');
+  const dir = positional(rest) ?? join(cwd, 'api-versions');
   if (command === 'init') {
     const created = init(argv[3] ? argv[3] : cwd);
     process.stdout.write(`created ${created}\n`);
@@ -57,7 +66,8 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
     try {
       const format = rest.includes('--format') && rest[rest.indexOf('--format') + 1] === 'json' ? 'json' : 'markdown';
       const result = writeChangelog(dir);
-      process.stdout.write(format === 'json' ? `${JSON.stringify(result.json)}\n` : `${result.markdown}\n`);
+      const types = rest.includes('--types') ? `\n\n${typeDiff(dir)}` : '';
+      process.stdout.write(format === 'json' ? `${JSON.stringify(result.json)}\n` : `${result.markdown}${types}\n`);
       return 0;
     } catch (error) {
       process.stderr.write(`${error instanceof Error ? error.message : 'changelog failed'}\n`);
@@ -79,8 +89,105 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
     for (const problem of problems) process.stderr.write(`${problem.message} Fix: ${problem.fix}\n`);
     return 1;
   }
-  process.stderr.write('usage: apiversa init [directory] | apiversa lock [api-versions] | apiversa doctor [api-versions] | apiversa generate [api-versions] | apiversa check [api-versions] [--format markdown] [--suggest] | apiversa test [api-versions] | apiversa openapi [api-versions] | apiversa changelog [api-versions] [--format json]\n');
+  if (command === 'eject') {
+    const out = flag(rest, '--out') ?? join(cwd, 'ejected');
+    const written = eject(dir, out);
+    for (const file of written) process.stdout.write(`wrote ${file}\n`);
+    return 0;
+  }
+  if (command === 'explain') {
+    const version = flag(rest, '--version');
+    const route = flag(rest, '--route');
+    if (!version || !route) {
+      process.stderr.write('usage: apiversa explain --version YYYY-MM-DD --route "GET /hotels/:id" [api-versions]\n');
+      return 1;
+    }
+    process.stdout.write(`${explain(dir, version, route)}\n`);
+    return 0;
+  }
+  if (command === 'retire') {
+    const date = rest.find((arg) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(arg));
+    const folder = rest.find((arg) => arg !== date && !arg.startsWith('--')) ?? join(cwd, 'api-versions');
+    if (!date) {
+      process.stderr.write('usage: apiversa retire YYYY-MM-DD [api-versions] [--force]\n');
+      return 1;
+    }
+    try {
+      const removed = retire(folder, date, { force: rest.includes('--force') });
+      process.stdout.write(`retired ${date}\n`);
+      for (const file of removed) process.stdout.write(`removed ${file}\n`);
+      return 0;
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : 'retire failed'}\n`);
+      return 1;
+    }
+  }
+  if (command === 'replay') {
+    const file = flag(rest, '--samples') ?? positional(rest.filter((arg) => arg !== dir));
+    if (!file) {
+      process.stderr.write('usage: apiversa replay --samples samples.jsonl [api-versions]\n');
+      return 1;
+    }
+    const found = replay(dir, file);
+    if (found.length === 0) {
+      process.stdout.write('apiversa replay: no differences\n');
+      return 0;
+    }
+    for (const line of found) process.stderr.write(`${line}\n`);
+    return 1;
+  }
+  if (command === 'diff') {
+    const schema = flag(rest, '--schema');
+    const from = flag(rest, '--from');
+    const body = flag(rest, '--body');
+    if (!schema || !from || !body) {
+      process.stderr.write('usage: apiversa diff --schema Hotel --from YYYY-MM-DD --body body.json [--to YYYY-MM-DD] [--out file] [api-versions]\n');
+      return 1;
+    }
+    const result = diffBody(dir, schema, from, flag(rest, '--to') ?? '', readFile(body), flag(rest, '--out'));
+    if (!result.ok) {
+      process.stderr.write(`${result.code}\n`);
+      return 1;
+    }
+    if (result.text) process.stdout.write(`${result.text}\n`);
+    return 0;
+  }
+  if (command === 'matrix') {
+    const written = writeMatrix(dir, flag(rest, '--out'));
+    process.stdout.write(`wrote ${written}\n`);
+    return 0;
+  }
+  if (command === 'upgrade-guide') {
+    const from = flag(rest, '--from');
+    if (!from) {
+      process.stderr.write('usage: apiversa upgrade-guide --from YYYY-MM-DD [api-versions]\n');
+      return 1;
+    }
+    process.stdout.write(`${upgradeGuide(dir, from)}\n`);
+    return 0;
+  }
+  process.stderr.write('usage: apiversa init [directory] | apiversa lock [api-versions] | apiversa doctor [api-versions] | apiversa generate [api-versions] | apiversa check [api-versions] [--format markdown] [--suggest] | apiversa test [api-versions] | apiversa openapi [api-versions] | apiversa changelog [api-versions] [--format json] | apiversa eject [api-versions] [--out dir] | apiversa upgrade-guide --from YYYY-MM-DD [api-versions]\n');
   return 1;
+}
+
+function readFile(path: string): string {
+  return readFileSync(path, 'utf8');
+}
+
+function flag(rest: string[], name: string): string | undefined {
+  const index = rest.indexOf(name);
+  if (index < 0) return undefined;
+  const value = rest[index + 1];
+  return value && !value.startsWith('--') ? value : undefined;
+}
+
+function positional(rest: string[]): string | undefined {
+  const skip = new Set<number>();
+  for (const name of ['--format', '--from', '--out', '--version', '--route', '--samples', '--schema', '--to', '--body']) {
+    const index = rest.indexOf(name);
+    if (index >= 0) skip.add(index + 1);
+  }
+  return rest.find((arg, index) => !skip.has(index) && !arg.startsWith('--'));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

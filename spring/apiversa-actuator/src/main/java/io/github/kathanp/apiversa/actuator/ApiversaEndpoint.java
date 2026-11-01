@@ -43,6 +43,7 @@ public class ApiversaEndpoint {
         body.put("versions", versions);
         body.put("deprecations", deprecations);
         body.put("usage", usage);
+        body.put("unpinned", counts.unpinnedByVersion());
         body.put("safeToRemove", counts.safeToRemove(bundle));
         return body;
     }

@@ -1,0 +1,14 @@
+{
+  "name": "@apiversa/koa",
+  "version": "0.1.0",
+  "description": "Koa adapter for apiversa",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "dependencies": {},
+  "peerDependencies": { "apiversa": "0.1.0", "koa": ">=2 <4" },
+  "peerDependenciesMeta": { "koa": { "optional": true } }
+}

@@ -9,6 +9,7 @@ export default defineConfig({
       '@apiversa/zod': fileURLToPath(new URL('./packages/zod/src/index.ts', import.meta.url)),
       '@apiversa/express': fileURLToPath(new URL('./packages/express/src/index.ts', import.meta.url)),
       '@apiversa/fastify': fileURLToPath(new URL('./packages/fastify/src/index.ts', import.meta.url)),
+      '@apiversa/client': fileURLToPath(new URL('./packages/client/src/index.ts', import.meta.url)),
     },
   },
   test: {
