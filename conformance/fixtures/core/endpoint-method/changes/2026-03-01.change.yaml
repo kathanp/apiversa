@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: method-search
+description: "POST /search became GET /search."
+changes:
+  - op: endpoint.method
+    path: /search
+    from: POST
+    to: GET

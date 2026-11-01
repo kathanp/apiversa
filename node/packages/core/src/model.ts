@@ -21,6 +21,14 @@ export type RawOp = {
   down?: unknown;
   up?: unknown;
   legacyHandler?: string;
+  sunset?: string;
+  docs?: string;
+  items?: string;
+  cursorHeader?: string;
+  target?: string;
+  prefix?: string;
+  numeric?: boolean;
+  scope?: { routes?: string[]; on?: 'request' | 'response' };
 };
 
 export type Change = {
@@ -67,10 +75,20 @@ export function opRuns(op: RawOp, direction: Direction, converters: Record<strin
     case 'query.rename':
     case 'query.add':
     case 'query.remove':
+    case 'param.move':
       return direction === 'up';
+    case 'response.envelope':
+      return direction === 'down';
+    case 'value.prefix': {
+      const target = op.target ?? '';
+      if (target.startsWith('path:') || target.startsWith('query:')) return direction === 'up';
+      return true;
+    }
     case 'endpoint.add':
     case 'endpoint.remove':
     case 'endpoint.rename':
+    case 'endpoint.method':
+    case 'endpoint.deprecate':
     case 'field.deprecate':
       return false;
     case 'custom': {

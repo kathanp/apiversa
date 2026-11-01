@@ -5,6 +5,7 @@ import { fail } from '../errors.js';
 import type { Registry } from '../json/parse.js';
 import { DEFAULT_LIMITS, type Limits } from '../limits.js';
 import { opRuns, type Change, type Converter, type PinStore, type RawOp } from '../model.js';
+import { checkScope, scopeAllows } from '../ops/scope.js';
 import { validateDocument } from '../schema/validate.js';
 import { parseYaml } from '../yaml/parse.js';
 
@@ -101,6 +102,10 @@ export function buildBundle(
       if (op.op === 'link.rewrite' && (`${op.from ?? ''}${op.to ?? ''}`.includes('{'))) {
         throw fail('AV-E001', 'startup', 'link.rewrite uses :param');
       }
+      if ((op.op === 'endpoint.method' || op.op === 'param.move' || op.op === 'endpoint.deprecate' || op.op === 'response.envelope') && `${op.path ?? ''}`.includes('{')) {
+        throw fail('AV-E001', 'startup', 'route patterns use :param');
+      }
+      checkScope(op);
     }
     changes.push({ version: file.version, id: file.id, description: file.description, ops: file.changes });
   }
@@ -154,13 +159,13 @@ export function directionHasWork(bundle: Bundle, version: string, direction: imp
 
 export type Planned = { version: string; id: string; op: RawOp };
 
-export function planFor(bundle: Bundle, version: string, direction: import('../errors.js').Direction): Planned[] {
+export function planFor(bundle: Bundle, version: string, direction: import('../errors.js').Direction, route?: { method?: string; path?: string }): Planned[] {
   const selected = bundle.changes.filter((change) => change.version > version);
   selected.sort((a, b) => (a.version < b.version ? -1 : a.version > b.version ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const steps: Planned[] = [];
   for (const change of selected) {
     for (const op of change.ops) {
-      if (opRuns(op, direction, bundle.converters)) steps.push({ version: change.version, id: change.id, op });
+      if (opRuns(op, direction, bundle.converters) && scopeAllows(op, direction, route)) steps.push({ version: change.version, id: change.id, op });
     }
   }
   if (direction === 'down') steps.reverse();

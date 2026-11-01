@@ -1,0 +1,14 @@
+{
+  "schema": "Hotel",
+  "direction": "down",
+  "version": "2026-01-15",
+  "request": { "method": "GET", "path": "/search", "query": [], "headers": [], "body": null },
+  "response": {
+    "headers": [
+      ["Deprecation", "@1772323200"],
+      ["Sunset", "Mon, 01 Jun 2026 00:00:00 GMT"],
+      ["Link", "</docs/search>; rel=\"deprecation\""]
+    ],
+    "body": null
+  }
+}

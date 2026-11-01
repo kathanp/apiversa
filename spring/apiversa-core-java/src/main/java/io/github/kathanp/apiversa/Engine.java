@@ -5,6 +5,8 @@ import io.github.kathanp.apiversa.Json.Obj;
 import io.github.kathanp.apiversa.Json.SchemaDef;
 import io.github.kathanp.apiversa.Json.SchemaField;
 import io.github.kathanp.apiversa.Json.V;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -15,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -56,7 +59,7 @@ public final class Engine {
 
     public record Step(String version, String id, Map<String, Object> op) {}
 
-    public record Result(Object body, @Nullable String path, @Nullable List<String[]> query, @Nullable List<String[]> headers, @Nullable Integer status, @Nullable String legacyHandler, @Nullable String trace, boolean parsed) {}
+    public record Result(Object body, @Nullable String path, @Nullable List<String[]> query, @Nullable List<String[]> headers, @Nullable Integer status, @Nullable String legacyHandler, @Nullable String trace, boolean parsed, @Nullable String method) {}
 
     private Engine() {}
 
@@ -130,6 +133,8 @@ public final class Engine {
                 if (("header.add".equals(opName) || "header.remove".equals(opName)) && !(op.get("default") instanceof String)) throw ApiversaException.fail("AV-E001", "startup");
                 if (("header.add".equals(opName) || "header.remove".equals(opName)) && op.get("name") != null && String.valueOf(op.get("name")).equalsIgnoreCase("Api-Version")) throw ApiversaException.fail("AV-E001", "startup");
                 if ("link.rewrite".equals(opName) && (String.valueOf(op.get("from")) + String.valueOf(op.get("to"))).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
+                if (("endpoint.method".equals(opName) || "param.move".equals(opName) || "endpoint.deprecate".equals(opName) || "response.envelope".equals(opName)) && String.valueOf(op.get("path")).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
+                checkScope(op);
                 ops.add(op);
             }
             changes.add(new Change(version, id, String.valueOf(raw.get("description")), ops));
@@ -158,7 +163,7 @@ public final class Engine {
         selected.sort(Comparator.comparing(Change::version).thenComparing(Change::id));
         List<Step> steps = new ArrayList<>();
         for (Change change : selected) {
-            for (Map<String, Object> op : change.ops) if (runs(op, direction, bundle.converters)) steps.add(new Step(change.version, change.id, op));
+            for (Map<String, Object> op : change.ops) if (runs(op, direction, bundle.converters) && scopeOn(op, direction)) steps.add(new Step(change.version, change.id, op));
         }
         if ("down".equals(direction)) java.util.Collections.reverse(steps);
         return steps;
@@ -166,14 +171,18 @@ public final class Engine {
 
     public static Result execute(Bundle bundle, Request request, String direction) {
         String path = request.path == null ? "" : request.path;
+        String methodNow = request.method;
         String legacy = null;
         if ("up".equals(direction)) {
             Route route = route(bundle.changes, request.version, request.method, request.path);
             path = route.path;
+            methodNow = route.method;
             legacy = route.legacyHandler;
             if (route.error != null) throw new ApiversaException(route.error, "up", bundle.dates, List.of());
         }
-        List<Step> steps = plan(bundle, request.version, direction).stream().filter(step -> !"error.shape".equals(step.op.get("op")) || "down".equals(direction)).toList();
+        List<Step> steps = plan(bundle, request.version, direction).stream()
+                .filter(step -> scopeRoute(step.op, request.method, request.path))
+                .filter(step -> !"error.shape".equals(step.op.get("op")) || "down".equals(direction)).toList();
         boolean errorBody = request.isError || (request.status != null && request.status >= 400 && "down".equals(direction));
         List<Step> bodySteps = new ArrayList<>();
         for (Step step : steps) if (bodyOp(step.op) && includeBody(step, request, direction, errorBody)) bodySteps.add(step);
@@ -183,7 +192,7 @@ public final class Engine {
         Object body = request.body;
         boolean parsed = false;
         boolean meta = steps.stream().anyMatch(step -> meta(String.valueOf(step.op.get("op"))));
-        if (bodySteps.isEmpty() && !meta) return finish(request, direction, steps, body, path, query, headers, status, legacy, false);
+        if (bodySteps.isEmpty() && !meta) return finish(request, direction, steps, body, path, query, headers, status, legacy, false, methodNow);
         if (!bodySteps.isEmpty() && body != null) {
             V json;
             try {
@@ -191,7 +200,7 @@ public final class Engine {
             } catch (ApiversaException exception) {
                 if ("AV-E008".equals(exception.code()) && "passthrough".equals(bundle.oversize) && "down".equals(direction)) {
                     System.err.println("apiversa: oversized body passed through as the head shape");
-                    return finish(request, direction, steps, body, path, query, headers, status, legacy, false);
+                    return finish(request, direction, steps, body, path, query, headers, status, legacy, false, methodNow);
                 }
                 throw exception;
             }
@@ -199,7 +208,12 @@ public final class Engine {
             V current = json;
             for (Step step : steps) {
                 String name = String.valueOf(step.op.get("op"));
-                if (bodyOp(step.op) && applies(bundle.registry, request.schema, step.op.get("schema") == null ? null : String.valueOf(step.op.get("schema")))) {
+                if ("response.envelope".equals(name) || "value.prefix".equals(name)) {
+                    Routed routed = routeOp(current, step.op, direction, request, path, query, headers, bundle.changes);
+                    current = routed.body == null ? current : routed.body;
+                    path = routed.path;
+                    query = routed.query;
+                } else if (bodyOp(step.op) && applies(bundle.registry, request.schema, step.op.get("schema") == null ? null : String.valueOf(step.op.get("schema")))) {
                     if ("error.shape".equals(name)) {
                         if (request.isError || (status != null && status >= 400)) current = apply(current, request.schema, step.op, direction, bundle, request, status, 0);
                     } else if (!request.isError && !(status != null && status >= 400 && "down".equals(direction))) {
@@ -208,6 +222,7 @@ public final class Engine {
                 } else if (name.startsWith("query.")) query = queryOp(query, step.op, direction);
                 else if (name.startsWith("header.")) headers = headerOp(headers, step.op, direction);
                 else if ("status.change".equals(name)) status = statusChange(status, step.op, direction);
+                else if ("param.move".equals(name)) path = paramMove(step.op, direction, request, methodNow, path, query, headers, body, bundle.changes);
             }
             body = materialize(current, request.schema, bundle.registry);
         } else {
@@ -216,9 +231,15 @@ public final class Engine {
                 if (name.startsWith("query.")) query = queryOp(query, step.op, direction);
                 else if (name.startsWith("header.")) headers = headerOp(headers, step.op, direction);
                 else if ("status.change".equals(name)) status = statusChange(status, step.op, direction);
+                else if ("param.move".equals(name)) path = paramMove(step.op, direction, request, methodNow, path, query, headers, body, bundle.changes);
+                else if ("value.prefix".equals(name)) {
+                    Routed routed = routeOp(null, step.op, direction, request, path, query, headers, bundle.changes);
+                    path = routed.path;
+                    query = routed.query;
+                }
             }
         }
-        return finish(request, direction, steps, body, path, query, headers, status, legacy, parsed);
+        return finish(request, direction, steps, body, path, query, headers, status, legacy, parsed, methodNow);
     }
 
     /** The payload in head shape. Same `up` chain as a request. An empty plan returns the original value. */
@@ -313,6 +334,27 @@ public final class Engine {
             headers.add(new String[] {"Sunset", DateTimeFormatter.RFC_1123_DATE_TIME.format(LocalDate.parse(info.sunset()).atStartOfDay(ZoneOffset.UTC))});
         }
         headers.add(new String[] {"Link", "</apiversa/upgrade>; rel=\"deprecation\""});
+        return headers;
+    }
+
+    /** RFC 9745 headers for one route. The `@` date is the change file's version. Empty when the route is gone. */
+    public static List<String[]> endpointDeprecationHeaders(Bundle bundle, String version, @Nullable String method, @Nullable String path) {
+        if (method == null || path == null || method.isBlank() || path.isBlank()) return List.of();
+        List<String[]> headers = new ArrayList<>();
+        for (Change change : bundle.changes) {
+            for (Map<String, Object> op : change.ops) {
+                if (!"endpoint.deprecate".equals(op.get("op")) || op.get("method") == null || op.get("path") == null) continue;
+                if (!method.equals(op.get("method")) || !matchPath(String.valueOf(op.get("path")), path)) continue;
+                Route gate = route(bundle.changes, version, method, path);
+                if ("AV-E010".equals(gate.error) || "AV-E011".equals(gate.error)) continue;
+                long epoch = LocalDate.parse(change.version).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+                headers.add(new String[] {"Deprecation", "@" + epoch});
+                if (op.get("sunset") instanceof String sunset && !sunset.isBlank()) {
+                    headers.add(new String[] {"Sunset", rfc1123(sunset)});
+                }
+                if (op.get("docs") instanceof String docs && !docs.isBlank()) headers.add(new String[] {"Link", "<" + docs + ">; rel=\"deprecation\""});
+            }
+        }
         return headers;
     }
 
@@ -469,7 +511,7 @@ public final class Engine {
 
     public record Request(@Nullable String schema, String version, @Nullable Object body, @Nullable String method, @Nullable String path, @Nullable List<String[]> query, @Nullable List<String[]> headers, @Nullable Integer status, boolean isError, @Nullable String errorCode, boolean trace) {}
 
-    private static Result finish(Request request, String direction, List<Step> steps, Object body, String path, List<String[]> query, List<String[]> headers, Integer status, String legacy, boolean parsed) {
+    private static Result finish(Request request, String direction, List<Step> steps, Object body, String path, List<String[]> query, List<String[]> headers, Integer status, String legacy, boolean parsed, String method) {
         String trace = null;
         if (request.trace) {
             List<String> ids = new ArrayList<>();
@@ -479,7 +521,7 @@ public final class Engine {
             }
             trace = ids.isEmpty() ? null : String.join(", ", ids);
         }
-        return new Result(body, path, query, headers, status, legacy, trace, parsed);
+        return new Result(body, path, query, headers, status, legacy, trace, parsed, method);
     }
 
     private static boolean includeBody(Step step, Request request, String direction, boolean errorBody) {
@@ -502,21 +544,174 @@ public final class Engine {
         return Json.toPlain(value, schema, registry);
     }
 
+    private static final Set<String> ROUTE_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS");
+
+    private static void checkScope(Map<String, Object> op) {
+        Object scope = op.get("scope");
+        if (scope == null) return;
+        String name = String.valueOf(op.get("op"));
+        if (!(name.startsWith("field.") || name.startsWith("enum.") || "object.wrap".equals(name))) throw ApiversaException.fail("AV-E001", "startup");
+        if (!(scope instanceof Map<?, ?> map)) throw ApiversaException.fail("AV-E001", "startup");
+        Object on = map.get("on");
+        if (on != null && !"request".equals(on) && !"response".equals(on)) throw ApiversaException.fail("AV-E001", "startup");
+        Object routes = map.get("routes");
+        if (routes == null) return;
+        if (!(routes instanceof List<?> list)) throw ApiversaException.fail("AV-E001", "startup");
+        for (Object route : list) checkRoute(String.valueOf(route));
+    }
+
+    private static void checkRoute(String route) {
+        int space = route.indexOf(' ');
+        String method = space < 0 ? "" : route.substring(0, space);
+        String path = space < 0 ? "" : route.substring(space + 1);
+        if (!ROUTE_METHODS.contains(method) || !path.startsWith("/") || path.contains("*") || path.contains("{") || path.contains(" ")) throw ApiversaException.fail("AV-E001", "startup");
+    }
+
+    private static boolean scopeOn(Map<String, Object> op, String direction) {
+        Object scope = op.get("scope");
+        if (!(scope instanceof Map<?, ?> map)) return true;
+        Object on = map.get("on");
+        if ("request".equals(on) && !"up".equals(direction)) return false;
+        if ("response".equals(on) && !"down".equals(direction)) return false;
+        return true;
+    }
+
+    private static boolean scopeRoute(Map<String, Object> op, @Nullable String method, @Nullable String path) {
+        Object scope = op.get("scope");
+        if (!(scope instanceof Map<?, ?> map)) return true;
+        Object routes = map.get("routes");
+        if (!(routes instanceof List<?> list) || list.isEmpty()) return true;
+        if (method == null || path == null) return false;
+        for (Object route : list) {
+            String text = String.valueOf(route);
+            int space = text.indexOf(' ');
+            if (space > 0 && text.substring(0, space).equals(method) && matchPath(text.substring(space + 1), path)) return true;
+        }
+        return false;
+    }
+
+    private record Routed(@Nullable V body, String path, List<String[]> query) {}
+
+    private static Routed routeOp(@Nullable V body, Map<String, Object> op, String direction, Request request, String path, List<String[]> query, List<String[]> headers, List<Change> changes) {
+        String name = String.valueOf(op.get("op"));
+        if ("response.envelope".equals(name)) {
+            if (!"down".equals(direction) || !envelopeMatches(op, request.method, request.path)) return new Routed(body, path, query);
+            if (!(body instanceof Obj page)) throw ApiversaException.fail("AV-E016", "down");
+            String items = op.get("items") == null ? "data" : String.valueOf(op.get("items"));
+            List<Leaf> found = leaves(page, items, "down");
+            if (found.isEmpty() || !found.get(0).exists()) throw ApiversaException.fail("AV-E016", "down");
+            V value = found.get(0).parent().values.get(found.get(0).key());
+            if (!(value instanceof Arr)) throw ApiversaException.fail("AV-E016", "down");
+            Object cursorName = op.get("cursorHeader");
+            if (cursorName != null) {
+                V cursor = page.values.get("next_cursor");
+                if (cursor instanceof Json.Str str) headers.add(new String[]{String.valueOf(cursorName), str.value()});
+                else if (cursor instanceof Json.Num num) headers.add(new String[]{String.valueOf(cursorName), Json.encode(num, "down")});
+            }
+            return new Routed(value, path, query);
+        }
+        String target = String.valueOf(op.get("target"));
+        int split = target.indexOf(':');
+        if (split < 1) return new Routed(body, path, query);
+        String kind = target.substring(0, split);
+        String field = target.substring(split + 1);
+        String prefix = op.get("prefix") == null ? "" : String.valueOf(op.get("prefix"));
+        if (("path".equals(kind) || "query".equals(kind)) && !"up".equals(direction)) return new Routed(body, path, query);
+        if ("query".equals(kind)) {
+            List<String[]> next = new ArrayList<>();
+            for (String[] pair : query) next.add(pair[0].equals(field) ? new String[]{pair[0], prefix + pair[1]} : pair);
+            return new Routed(body, path, next);
+        }
+        if ("path".equals(kind)) {
+            String pattern = patternFor(changes, path, field);
+            if (pattern == null) return new Routed(body, path, query);
+            String current = pathParam(pattern, path, field);
+            if (current == null) return new Routed(body, path, query);
+            return new Routed(body, writeSegment(pattern, path, field, prefix + current), query);
+        }
+        if (!(body instanceof Obj obj)) return new Routed(body, path, query);
+        List<Leaf> found = leaves(obj, field, direction);
+        if (found.isEmpty() || !found.get(0).exists()) return new Routed(body, path, query);
+        Leaf leaf = found.get(0);
+        V value = leaf.parent().values.get(leaf.key());
+        if (value == null || value instanceof Json.Null) return new Routed(body, path, query);
+        if ("up".equals(direction)) {
+            if (value instanceof Json.Str str) leaf.parent().values.put(leaf.key(), new Json.Str(prefix + str.value()));
+            else if (value instanceof Json.Num num) leaf.parent().values.put(leaf.key(), new Json.Str(prefix + Json.encode(num, "up")));
+            return new Routed(body, path, query);
+        }
+        if (!(value instanceof Json.Str str) || !str.value().startsWith(prefix)) return new Routed(body, path, query);
+        String rest = str.value().substring(prefix.length());
+        if (Boolean.TRUE.equals(op.get("numeric"))) {
+            Double number = safeInteger(rest);
+            leaf.parent().values.put(leaf.key(), number == null ? new Json.Str(rest) : new Json.Num(number));
+        } else leaf.parent().values.put(leaf.key(), new Json.Str(rest));
+        return new Routed(body, path, query);
+    }
+
+    private static boolean envelopeMatches(Map<String, Object> op, @Nullable String method, @Nullable String path) {
+        if (!(op.get("method") instanceof String routeMethod) || !(op.get("path") instanceof String routePath) || method == null || path == null) return false;
+        return routeMethod.equals(method) && matchPath(routePath, path);
+    }
+
+    private static String patternFor(List<Change> changes, String actual, String name) {
+        for (Change change : changes) {
+            for (Map<String, Object> op : change.ops()) {
+                if (!String.valueOf(op.get("op")).startsWith("endpoint.")) continue;
+                for (String key : new String[]{"path", "from", "to"}) {
+                    if (!(op.get(key) instanceof String pattern) || !pattern.contains(":" + name)) continue;
+                    if (pathParam(pattern, actual, name) != null) return pattern;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String writeSegment(String pattern, String actual, String name, String value) {
+        List<String> left = new ArrayList<>();
+        List<String> right = new ArrayList<>();
+        for (String part : pattern.split("/")) if (!part.isEmpty()) left.add(part);
+        for (String part : actual.split("/")) if (!part.isEmpty()) right.add(part);
+        String encoded = URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+        for (int i = 0; i < left.size() && i < right.size(); i++) if (left.get(i).equals(":" + name)) right.set(i, encoded);
+        return (actual.startsWith("/") ? "/" : "") + String.join("/", right);
+    }
+
+    private static Double safeInteger(String text) {
+        if (!text.matches("-?\\d+")) return null;
+        java.math.BigInteger value;
+        try {
+            value = new java.math.BigInteger(text);
+        } catch (NumberFormatException error) {
+            return null;
+        }
+        if (value.abs().compareTo(new java.math.BigInteger("9007199254740991")) > 0) return null;
+        if (!value.toString().equals(text)) return null;
+        return value.doubleValue();
+    }
+
     private static boolean bodyOp(Map<String, Object> op) {
         String name = String.valueOf(op.get("op"));
+        if ("response.envelope".equals(name)) return true;
+        if ("value.prefix".equals(name)) return String.valueOf(op.get("target")).startsWith("body:");
         return ((name.startsWith("field.") && !"field.deprecate".equals(name)) || name.startsWith("enum.") || "object.wrap".equals(name) || "custom".equals(name) || "error.shape".equals(name) || "link.rewrite".equals(name));
     }
 
     private static boolean meta(String op) {
-        return op.startsWith("query.") || op.startsWith("header.") || "status.change".equals(op);
+        return op.startsWith("query.") || op.startsWith("header.") || "status.change".equals(op) || "param.move".equals(op) || "value.prefix".equals(op);
     }
 
     private static boolean runs(Map<String, Object> op, String direction, Map<String, Converter> converters) {
         String name = String.valueOf(op.get("op"));
         return switch (name) {
-            case "enum.add", "error.shape", "status.change" -> "down".equals(direction);
-            case "enum.remove", "query.rename", "query.add", "query.remove" -> "up".equals(direction);
-            case "endpoint.add", "endpoint.remove", "endpoint.rename", "field.deprecate" -> false;
+            case "enum.add", "error.shape", "status.change", "response.envelope" -> "down".equals(direction);
+            case "enum.remove", "query.rename", "query.add", "query.remove", "param.move" -> "up".equals(direction);
+            case "value.prefix" -> {
+                String target = String.valueOf(op.get("target"));
+                if (target.startsWith("path:") || target.startsWith("query:")) yield "up".equals(direction);
+                yield true;
+            }
+            case "endpoint.add", "endpoint.remove", "endpoint.rename", "endpoint.method", "endpoint.deprecate", "field.deprecate" -> false;
             case "custom" -> op.get("converter") != null && converters.containsKey(String.valueOf(op.get("converter"))) && ("up".equals(direction) || converters.get(String.valueOf(op.get("converter"))) != null);
             default -> true;
         };
@@ -984,29 +1179,214 @@ public final class Engine {
         return status;
     }
 
-    private record Route(String path, String error, String legacyHandler) {}
+    private static final String[] RFC_DAYS = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    private static final String[] RFC_MONTHS = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+    /** RFC 1123 date at UTC midnight, with a zero-padded day, matching the Node header. */
+    private static String rfc1123(String date) {
+        LocalDate parsed = LocalDate.parse(date);
+        int dow = parsed.getDayOfWeek().getValue() % 7;
+        return String.format(Locale.ROOT, "%s, %02d %s %04d 00:00:00 GMT", RFC_DAYS[dow], parsed.getDayOfMonth(), RFC_MONTHS[parsed.getMonthValue() - 1], parsed.getYear());
+    }
+
+    private static String paramMove(Map<String, Object> op, String direction, Request request, String rewritten, String path, List<String[]> query, List<String[]> headers, Object body, List<Change> changes) {
+        if (!"up".equals(direction)) return path;
+        Object declared = op.get("method");
+        if (declared != null && request.method != null && !declared.equals(request.method) && !declared.equals(rewritten)) return path;
+        String route = op.get("path") == null ? "" : String.valueOf(op.get("path"));
+        if (!route.isEmpty() && request.path != null && !matchPath(route, request.path)) return path;
+        String from = String.valueOf(op.get("from"));
+        String to = String.valueOf(op.get("to"));
+        Object value = readLoc(from, route, request.path, query, headers, body);
+        if (value == null) return path;
+        Object existing = readLoc(to, route, path, query, headers, body);
+        if (existing != null && !sameMoved(existing, value)) throw ApiversaException.fail("AV-E017", "up");
+        if (existing == null) path = writeLoc(to, value, route, path, query, headers, body, changes, request.method == null ? rewritten : request.method);
+        if (!sameLoc(from, to)) clearLoc(from, query, headers, body);
+        return path;
+    }
+
+    private static Object readLoc(String spec, String route, @Nullable String path, List<String[]> query, List<String[]> headers, Object body) {
+        int index = spec.indexOf(':');
+        if (index < 1 || index == spec.length() - 1) throw ApiversaException.fail("AV-E016", "up");
+        String kind = spec.substring(0, index);
+        String name = spec.substring(index + 1);
+        return switch (kind) {
+            case "query" -> readMovedQuery(query, name);
+            case "header" -> readMovedHeader(headers, name);
+            case "path" -> pathParam(route, path, name);
+            case "body" -> readMovedBody(body, name);
+            default -> throw ApiversaException.fail("AV-E016", "up");
+        };
+    }
+
+    private static String writeLoc(String spec, Object value, String route, String path, List<String[]> query, List<String[]> headers, Object body, List<Change> changes, String method) {
+        int index = spec.indexOf(':');
+        String kind = spec.substring(0, index);
+        String name = spec.substring(index + 1);
+        if ("query".equals(kind)) {
+            if (value instanceof List<?> list) for (Object item : list) query.add(new String[] {name, String.valueOf(item)});
+            else query.add(new String[] {name, String.valueOf(value)});
+            return path;
+        }
+        if (value instanceof List<?>) throw ApiversaException.fail("AV-E016", "up");
+        if ("header".equals(kind)) {
+            headers.add(new String[] {name, String.valueOf(value)});
+            return path;
+        }
+        if ("path".equals(kind)) return writeMovedPath(path, route, name, String.valueOf(value), changes, method);
+        writeMovedBody(body, name, String.valueOf(value));
+        return path;
+    }
+
+    private static void clearLoc(String spec, List<String[]> query, List<String[]> headers, Object body) {
+        int index = spec.indexOf(':');
+        String kind = spec.substring(0, index);
+        String name = spec.substring(index + 1);
+        if ("query".equals(kind)) query.removeIf(pair -> pair[0].equals(name));
+        else if ("header".equals(kind)) headers.removeIf(pair -> pair[0].equalsIgnoreCase(name));
+        else if ("body".equals(kind)) clearMovedBody(body, name);
+    }
+
+    private static Object readMovedQuery(List<String[]> query, String name) {
+        List<String> hits = new ArrayList<>();
+        for (String[] pair : query) if (pair[0].equals(name)) hits.add(pair[1]);
+        if (hits.isEmpty()) return null;
+        return hits.size() == 1 ? hits.get(0) : hits;
+    }
+
+    private static String readMovedHeader(List<String[]> headers, String name) {
+        for (String[] pair : headers) if (pair[0].equalsIgnoreCase(name)) return pair[1];
+        return null;
+    }
+
+    private static String pathParam(String pattern, @Nullable String actual, String name) {
+        if (actual == null || !matchPath(pattern, actual)) return null;
+        String[] left = pattern.split("/");
+        String[] right = actual.split("/");
+        List<String> l = new ArrayList<>();
+        List<String> r = new ArrayList<>();
+        for (String part : left) if (!part.isEmpty()) l.add(part);
+        for (String part : right) if (!part.isEmpty()) r.add(part);
+        for (int i = 0; i < l.size(); i++) if (l.get(i).equals(":" + name)) return r.get(i);
+        return null;
+    }
+
+    private static Object readMovedBody(Object body, String path) {
+        Object current = body;
+        for (String part : path.split("\\.", -1)) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(part)) return null;
+            current = map.get(part);
+        }
+        if (current instanceof List<?> list) {
+            List<String> items = new ArrayList<>();
+            for (Object item : list) items.add(textOf(item));
+            return items;
+        }
+        return textOf(current);
+    }
+
+    private static void writeMovedBody(Object body, String path, String value) {
+        if (!(body instanceof Map<?, ?>)) throw ApiversaException.fail("AV-E016", "up");
+        String[] parts = path.split("\\.", -1);
+        Object current = body;
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (!(current instanceof Map<?, ?> map) || !(map.get(parts[i]) instanceof Map<?, ?>)) throw ApiversaException.fail("AV-E016", "up");
+            current = ((Map<?, ?>) current).get(parts[i]);
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parent = (Map<String, Object>) current;
+        parent.put(parts[parts.length - 1], value);
+    }
+
+    private static void clearMovedBody(Object body, String path) {
+        if (!(body instanceof Map<?, ?>)) return;
+        String[] parts = path.split("\\.", -1);
+        Object current = body;
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (!(current instanceof Map<?, ?> map)) return;
+            current = map.get(parts[i]);
+        }
+        if (current instanceof Map<?, ?> map) map.remove(parts[parts.length - 1]);
+    }
+
+    private static String writeMovedPath(String actual, String route, String name, String value, List<Change> changes, String method) {
+        String pattern = route;
+        List<Change> ordered = new ArrayList<>(changes);
+        ordered.sort(Comparator.comparing(Change::version).thenComparing(Change::id));
+        for (Change change : ordered) {
+            for (Map<String, Object> op : change.ops) {
+                if (!"endpoint.rename".equals(op.get("op")) || !pattern.equals(op.get("from")) || op.get("to") == null) continue;
+                if (op.get("method") != null && !method.equals(op.get("method"))) continue;
+                pattern = String.valueOf(op.get("to"));
+            }
+        }
+        List<String> parts = new ArrayList<>();
+        for (String part : pattern.split("/")) if (!part.isEmpty()) parts.add(part);
+        int index = parts.indexOf(":" + name);
+        if (index < 0) throw ApiversaException.fail("AV-E016", "up");
+        List<String> segs = new ArrayList<>();
+        for (String part : actual.split("/")) if (!part.isEmpty()) segs.add(part);
+        while (segs.size() < parts.size()) segs.add("");
+        String encoded = URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+        String slot = segs.get(index);
+        if (!slot.isEmpty() && !slot.equals(":" + name) && !slot.equals(encoded)) throw ApiversaException.fail("AV-E017", "up");
+        segs.set(index, encoded);
+        return (actual.startsWith("/") ? "/" : "") + String.join("/", segs);
+    }
+
+    private static String textOf(Object value) {
+        if (value instanceof String text) return text;
+        if (value instanceof Number || value instanceof Boolean) return Json.encode(Json.fromPlain(value, "up"), "up");
+        throw ApiversaException.fail("AV-E016", "up");
+    }
+
+    private static boolean sameMoved(Object left, Object right) {
+        List<String> a = left instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of(String.valueOf(left));
+        List<String> b = right instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of(String.valueOf(right));
+        return a.equals(b);
+    }
+
+    private static boolean sameLoc(String left, String right) {
+        int a = left.indexOf(':');
+        int b = right.indexOf(':');
+        if (a < 0 || b < 0) return false;
+        String kind = left.substring(0, a);
+        if (!kind.equals(right.substring(0, b))) return false;
+        String an = left.substring(a + 1);
+        String bn = right.substring(b + 1);
+        return "header".equals(kind) ? an.equalsIgnoreCase(bn) : an.equals(bn);
+    }
+
+    private record Route(String path, String error, String legacyHandler, String method) {}
 
     private static Route route(List<Change> changes, String version, String method, String path) {
-        if (method == null || path == null) return new Route(path == null ? "" : path, null, null);
+        if (method == null || path == null) return new Route(path == null ? "" : path, null, null, method);
         String current = path;
+        String methodNow = method;
         List<Change> ordered = new ArrayList<>(changes);
         ordered.sort(Comparator.comparing(Change::version).thenComparing(Change::id));
         for (Change change : ordered) {
             if (version.compareTo(change.version) >= 0) continue;
             for (Map<String, Object> op : change.ops) {
-                if (!"endpoint.rename".equals(op.get("op")) || !method.equals(op.get("method")) || op.get("from") == null || op.get("to") == null) continue;
+                if (!"endpoint.method".equals(op.get("op")) || op.get("path") == null || op.get("from") == null || op.get("to") == null) continue;
+                if (methodNow.equals(op.get("from")) && matchPath(String.valueOf(op.get("path")), current)) methodNow = String.valueOf(op.get("to"));
+            }
+            for (Map<String, Object> op : change.ops) {
+                if (!"endpoint.rename".equals(op.get("op")) || op.get("from") == null || op.get("to") == null) continue;
+                if (!methodNow.equals(op.get("method")) && !method.equals(op.get("method"))) continue;
                 if (matchPath(String.valueOf(op.get("from")), current)) current = rewrite(String.valueOf(op.get("from")), String.valueOf(op.get("to")), current);
             }
         }
         for (Change change : ordered) {
             for (Map<String, Object> op : change.ops) {
-                if (!method.equals(op.get("method")) || op.get("path") == null || !matchPath(String.valueOf(op.get("path")), current)) continue;
-                if ("endpoint.add".equals(op.get("op")) && version.compareTo(change.version) < 0) return new Route(current, "AV-E010", null);
-                if ("endpoint.remove".equals(op.get("op")) && version.compareTo(change.version) >= 0) return new Route(current, "AV-E011", null);
-                if ("endpoint.remove".equals(op.get("op")) && version.compareTo(change.version) < 0 && op.get("legacyHandler") != null) return new Route(current, null, String.valueOf(op.get("legacyHandler")));
+                if ((!methodNow.equals(op.get("method")) && !method.equals(op.get("method"))) || op.get("path") == null || !matchPath(String.valueOf(op.get("path")), current)) continue;
+                if ("endpoint.add".equals(op.get("op")) && version.compareTo(change.version) < 0) return new Route(current, "AV-E010", null, methodNow);
+                if ("endpoint.remove".equals(op.get("op")) && version.compareTo(change.version) >= 0) return new Route(current, "AV-E011", null, methodNow);
+                if ("endpoint.remove".equals(op.get("op")) && version.compareTo(change.version) < 0 && op.get("legacyHandler") != null) return new Route(current, null, String.valueOf(op.get("legacyHandler")), methodNow);
             }
         }
-        return new Route(current, null, null);
+        return new Route(current, null, null, methodNow);
     }
 
     private static boolean matchPath(String pattern, String actual) {

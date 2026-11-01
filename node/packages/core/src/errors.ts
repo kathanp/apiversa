@@ -17,6 +17,7 @@ export const CODES = [
   'AV-E014',
   'AV-E015',
   'AV-E016',
+  'AV-E017',
 ] as const;
 
 export type ErrorCode = (typeof CODES)[number];
@@ -38,6 +39,7 @@ export const MESSAGES: Record<ErrorCode, string> = {
   'AV-E014': 'JSON number cannot be encoded.',
   'AV-E015': 'Duplicate JSON key.',
   'AV-E016': 'Expression could not be read.',
+  'AV-E017': 'Parameter target is already set.',
 };
 
 export type Direction = 'up' | 'down';
@@ -52,6 +54,7 @@ export function statusFor(code: ErrorCode, when: When): number | undefined {
   if (when === 'startup' || STARTUP.has(code)) return undefined;
   switch (code) {
     case 'AV-E002':
+    case 'AV-E017':
       return 400;
     case 'AV-E004':
     case 'AV-E014':

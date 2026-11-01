@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: query-rename
+description: "Query town became city."
+changes:
+  - op: query.rename
+    method: GET
+    path: /hotels
+    from: town
+    to: city

@@ -2,6 +2,8 @@ package io.github.kathanp.apiversa.springdoc;
 
 import io.github.kathanp.apiversa.Engine;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.Schema;
 import java.util.ArrayList;
@@ -17,6 +19,7 @@ public final class ApiversaOpenApi {
     public static void customize(OpenAPI openApi, Engine.Bundle bundle, String date) {
         if (openApi.getInfo() == null) openApi.setInfo(new Info());
         openApi.getInfo().setVersion(date);
+        markRoutes(openApi, bundle, date);
         if (openApi.getComponents() == null || openApi.getComponents().getSchemas() == null) return;
         Map<String, Schema> schemas = openApi.getComponents().getSchemas();
         List<Engine.Change> newer = new ArrayList<>();
@@ -35,6 +38,20 @@ public final class ApiversaOpenApi {
                 if (schema == null || schema.getProperties() == null) continue;
                 Object property = schema.getProperties().get(String.valueOf(op.get("path")));
                 if (property instanceof Schema field) field.setDeprecated(true);
+            }
+        }
+    }
+
+    private static void markRoutes(OpenAPI openApi, Engine.Bundle bundle, String date) {
+        if (openApi.getPaths() == null) return;
+        for (Engine.Change change : bundle.changes()) {
+            if (change.version().compareTo(date) > 0) continue;
+            for (Map<String, Object> op : change.ops()) {
+                if (!"endpoint.deprecate".equals(op.get("op")) || !(op.get("method") instanceof String method) || !(op.get("path") instanceof String path)) continue;
+                PathItem item = openApi.getPaths().get(path);
+                if (item == null || item.readOperationsMap() == null) continue;
+                Operation operation = item.readOperationsMap().get(PathItem.HttpMethod.valueOf(method));
+                if (operation != null) operation.setDeprecated(true);
             }
         }
     }

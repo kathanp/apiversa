@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: remove-route
+description: "Removes GET /old."
+changes:
+  - op: endpoint.remove
+    method: GET
+    path: /old
+    legacyHandler: legacyReviews

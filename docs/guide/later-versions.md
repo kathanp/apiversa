@@ -20,4 +20,10 @@ The response `Api-Version` header is the resolved date. `Apiversa-Default` is se
 
 `header.add` and `header.remove` follow the same absence rules as fields. `link.rewrite` rewrites one string path (`:param` segments). `field.deprecate` does not change the body; OpenAPI marks the property deprecated from that version forward.
 
+## Routes
+
+`endpoint.method` sends an older method to the head method on the same path. Express and Koa rewrite the method before the router. Fastify registers the older method as a shim that calls the head handler. Spring's filter does the same before dispatch. Next rewrites the `Request` handed to the handler. A head request keeps its method. `param.move` moves one value from `path:`, `query:`, `header:`, or `body:` on the way up. A target that already has a different value is `400` / `AV-E017`. `endpoint.deprecate` sends `Deprecation` on every version where the route exists, plus `Sunset` and a `Link` when those are set. It does not reject the request. OpenAPI marks that operation deprecated from the change date forward.
+
+A field, enum, or object op may set `scope` so it runs only on listed routes, or only on the request or the response. `response.envelope` turns a page into the array at `items` for older clients. That conversion is the first page only: it copies `next_cursor` to `cursorHeader` when that is set, and it does not follow the cursor. `value.prefix` adds a fixed prefix on the way up and strips it on the way down. With `numeric: true`, a safe-integer remainder becomes a number.
+
 A schema discriminator runs a variant's changes only when the string at its path matches. `upgradeEvent(payload, schema, version)` runs the `up` chain. `apiversa diff` prints each step and the canonical body. `apiversa matrix` writes `upgrade-matrix.json`. Spring has the same `diff` and `matrix` goals.

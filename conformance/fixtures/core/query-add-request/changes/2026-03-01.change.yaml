@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: query-add
+description: "Adds limit."
+changes:
+  - op: query.add
+    method: GET
+    path: /hotels
+    name: limit
+    default: "20"

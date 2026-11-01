@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: deprecate-search
+description: "GET /search is deprecated."
+changes:
+  - op: endpoint.deprecate
+    method: GET
+    path: /search
+    sunset: "2026-06-01"
+    docs: /docs/search

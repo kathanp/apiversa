@@ -128,7 +128,7 @@ final class ApiversaMvc {
         return true;
     }
 
-    private static String path(HttpServletRequest request) {
+    static String path(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String context = request.getContextPath();
         if (context != null && !context.isEmpty() && uri.startsWith(context)) uri = uri.substring(context.length());
@@ -189,7 +189,14 @@ final class VersionedRequest extends HttpServletRequestWrapper {
         super(request);
     }
 
+    private String method;
+
     void rewrite(String path, List<String[]> query) {
+        rewrite(path, query, null);
+    }
+
+    void rewrite(String path, List<String[]> query, String method) {
+        if (method != null && !method.isBlank()) this.method = method;
         if (path != null && !path.isEmpty()) this.path = path.startsWith("/") ? path : "/" + path;
         if (query == null) return;
         Map<String, List<String>> grouped = new LinkedHashMap<>();
@@ -205,6 +212,11 @@ final class VersionedRequest extends HttpServletRequestWrapper {
         });
         this.parameters = map;
         this.query = built.toString();
+    }
+
+    @Override
+    public String getMethod() {
+        return method == null ? super.getMethod() : method;
     }
 
     @Override
@@ -300,7 +312,8 @@ final class ApiversaFilter extends OncePerRequestFilter {
                 for (String[] header : Engine.versionHeaders(properties.getHeader(), decision)) response.setHeader(header[0], header[1]);
                 ApiversaUsageRecorder.applyDeprecation(response, bundle, version);
                 Engine.Result result = ApiversaMvc.upgrade(bundle, properties, request, version);
-                wrapped.rewrite(result.path(), result.query());
+                wrapped.rewrite(result.path(), result.query(), result.method());
+                for (String[] header : Engine.endpointDeprecationHeaders(bundle, version, request.getMethod(), ApiversaMvc.path(request))) response.setHeader(header[0], header[1]);
                 wrapped.setAttribute(ApiversaMvc.UP, Boolean.TRUE);
                 if (result.trace() != null) wrapped.setAttribute(ApiversaMvc.TRACE, result.trace());
                 ApiversaUsageRecorder.count(wrapped, usages, bundle, version);

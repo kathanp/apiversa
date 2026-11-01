@@ -1,0 +1,7 @@
+version: "2026-03-01"
+id: header-add
+description: "Adds Request-Id."
+changes:
+  - op: header.add
+    name: Request-Id
+    default: "none"

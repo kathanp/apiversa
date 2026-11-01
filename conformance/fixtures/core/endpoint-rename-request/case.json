@@ -1,0 +1,7 @@
+{
+  "schema": "Hotel",
+  "direction": "up",
+  "version": "2026-01-15",
+  "request": { "method": "GET", "path": "/a/h_1", "query": [], "headers": [], "body": null },
+  "expected": { "method": "GET", "path": "/b/h_1", "query": [], "headers": [], "body": null }
+}

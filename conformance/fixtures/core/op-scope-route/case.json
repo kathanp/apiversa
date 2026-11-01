@@ -1,0 +1,8 @@
+{
+  "schema": "Hotel",
+  "fields": ["city", "locality"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "request": { "method": "GET", "path": "/rooms/h_1", "query": [], "headers": [], "body": { "city": "Paris" } },
+  "expected": { "method": "GET", "path": "/rooms/h_1", "query": [], "headers": [], "body": { "city": "Paris" } }
+}

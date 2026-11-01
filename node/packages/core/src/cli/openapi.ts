@@ -69,6 +69,7 @@ function documentAt(headDoc: OpenApiDocument, headFields: Record<string, HeadFie
   for (const change of newer) {
     for (const op of [...change.ops].reverse()) applyEndpoint(paths, change, op);
   }
+  markDeprecatedEndpoints(paths, bundle, date);
   applySchemas(doc, schemaFieldsAt(headFields, bundle, date), deprecatedAt(bundle, date));
   return doc;
 }
@@ -85,6 +86,18 @@ function deprecatedAt(bundle: Bundle, date: string): Map<string, Set<string>> {
     }
   }
   return marks;
+}
+
+function markDeprecatedEndpoints(paths: Record<string, Record<string, unknown>>, bundle: Bundle, date: string): void {
+  for (const change of bundle.changes) {
+    if (change.version > date) continue;
+    for (const op of change.ops) {
+      if (op.op !== 'endpoint.deprecate' || !op.method || !op.path) continue;
+      const key = findPath(paths, op.path) ?? openApiPath(op.path);
+      const operation = paths[key]?.[op.method.toLowerCase()] as { deprecated?: boolean } | undefined;
+      if (operation) operation.deprecated = true;
+    }
+  }
 }
 
 function applyEndpoint(paths: Record<string, Record<string, unknown>>, change: Change, op: RawOp): void {

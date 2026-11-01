@@ -75,6 +75,7 @@ function endpointsFor(file: ChangeFile, routes: { method?: string; path?: string
   const fromOps = file.changes
     .filter((op) => String(op.op ?? '').startsWith('endpoint.'))
     .map((op) => {
+      if (op.op === 'endpoint.method' && op.path) return `${op.from ?? 'GET'} ${op.path} -> ${op.to ?? 'GET'} ${op.path}`;
       if (op.path) return `${op.method ?? 'GET'} ${op.path}`;
       if (op.from && op.to) return `${op.method ?? 'GET'} ${op.from} -> ${op.to}`;
       return '';

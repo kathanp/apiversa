@@ -62,12 +62,13 @@ export class ApiversaInterceptor implements NestInterceptor {
     const raw = req.originalUrl ?? req.url ?? req.path ?? '/';
     const path = raw.split('?')[0] || '/';
     const query = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : undefined;
-    if (decl.body !== undefined && req.body !== undefined && !this.av.planIsEmpty(version, decl.body, 'up')) {
+    const seen = { method: req.method, path };
+    if (decl.body !== undefined && req.body !== undefined && !this.av.planIsEmpty(version, decl.body, 'up', seen)) {
       req.body = this.av.prepare('up', { schema: decl.body, body: req.body, version, method: req.method, path, query }).body;
     }
     if (decl.response === undefined) return next.handle();
     const schema = decl.response;
-    const emptyDown = this.av.planIsEmpty(version, schema, 'down');
+    const emptyDown = this.av.planIsEmpty(version, schema, 'down', seen);
     return next.handle().pipe(
       map((body) => (emptyDown ? body : downgrade(this.av, res, schema, version, req.method, path, body, res.statusCode ?? 200))),
       catchError((error: unknown) => {
@@ -110,6 +111,7 @@ function downgrade(av: Apiversa, res: HttpReply, schema: string, version: string
     errorCode: codeOf(body),
   });
   if (prepared.trace) setHeader(res, 'Apiversa-Trace', prepared.trace);
+  for (const header of prepared.headers) setHeader(res, header.name, header.value);
   return prepared.body;
 }
 

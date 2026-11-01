@@ -24,10 +24,38 @@ type VersionedResponse = {
 };
 
 /**
- * Global middleware. It does not convert. Only routes that use {@link route} are converted.
+ * Global middleware. It rewrites the method and URL before the router.
+ * Only routes that use {@link route} convert the body.
  */
-export function apiversa(_av: Apiversa): RequestHandler {
-  return (_req, _res, next) => {
+export function apiversa(av: Apiversa): RequestHandler {
+  return (req, _res, next) => {
+    const request = req as unknown as VersionedRequest;
+    try {
+      const version = av.resolveVersion({ headers: request.headers, request, path: request.originalUrl ?? request.path });
+      const prepared = av.prepare('up', {
+        version,
+        method: request.method,
+        path: request.path,
+        query: request.originalUrl?.includes('?') ? request.originalUrl.slice(request.originalUrl.indexOf('?') + 1) : undefined,
+      });
+      if (prepared.method && prepared.method !== request.method) request.method = prepared.method;
+      const query = prepared.query.map((pair) => `${encodeURIComponent(pair.name)}=${encodeURIComponent(pair.value)}`).join('&');
+      const nextUrl = `${prepared.path}${query ? `?${query}` : ''}`;
+      if (nextUrl !== request.path && (prepared.path !== request.path || query.length > 0)) {
+        request.originalUrl = nextUrl;
+        (req as { url?: string }).url = nextUrl;
+        const grouped: Record<string, string | string[]> = {};
+        for (const pair of prepared.query) {
+          const existing = grouped[pair.name];
+          if (existing === undefined) grouped[pair.name] = pair.value;
+          else if (Array.isArray(existing)) existing.push(pair.value);
+          else grouped[pair.name] = [existing, pair.value];
+        }
+        request.query = grouped;
+      }
+    } catch {
+      /* A route that opted in reports version errors. Other routes stay untouched. */
+    }
     next();
   };
 }
@@ -41,10 +69,11 @@ export function route(av: Apiversa, decl: RouteDecl): RequestHandler {
     try {
       const decision = av.resolveDecision({ headers: request.headers, request, path: request.originalUrl ?? request.path });
       version = decision.version;
-      for (const header of [...decision.headers, ...av.deprecationHeaders(version)]) response.setHeader(header.name, header.value);
+      for (const header of [...decision.headers, ...av.deprecationHeaders(version), ...av.endpointDeprecationHeaders(version, request.method, request.path)]) response.setHeader(header.name, header.value);
       av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${request.method} ${request.path}` });
-      const emptyUp = !decl.body || av.planIsEmpty(version, decl.body, 'up');
-      const emptyDown = !decl.response || av.planIsEmpty(version, decl.response, 'down');
+      const seen = { method: request.method, path: request.path };
+      const emptyUp = !decl.body || av.planIsEmpty(version, decl.body, 'up', seen);
+      const emptyDown = !decl.response || av.planIsEmpty(version, decl.response, 'down', seen);
       const type = contentType(request.headers);
       const raw = decl.body && !emptyUp && isForm(type) ? rawText(request.body) : undefined;
       if (raw !== undefined && decl.body) {
@@ -82,6 +111,7 @@ function wrap(av: Apiversa, res: VersionedResponse, version: string, schema: str
       isError: status !== undefined && status >= 400,
     });
     if (prepared.trace) res.setHeader('Apiversa-Trace', prepared.trace);
+    for (const header of prepared.headers) res.setHeader(header.name, header.value);
     return prepared.body;
   };
   const writeJson = (body: unknown) => {

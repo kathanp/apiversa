@@ -1,0 +1,7 @@
+{
+  "schema": "Hotel",
+  "direction": "down",
+  "version": "2026-01-15",
+  "request": { "method": "POST", "path": "/hotels", "query": [], "headers": [], "body": null, "status": 200 },
+  "response": { "status": 201, "headers": [], "body": null }
+}

@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: prefix-id
+description: "Hotel ids gained a prefix."
+changes:
+  - op: value.prefix
+    target: body:id
+    prefix: h_
+    numeric: true

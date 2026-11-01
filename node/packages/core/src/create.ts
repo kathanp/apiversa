@@ -1,7 +1,7 @@
 import type { Direction } from './errors.js';
 import { ApiversaError, fail } from './errors.js';
 import { loadBundle, planFor, type Bundle } from './bundle/load.js';
-import { clientHeaders, deprecationHeaders, memoryPins, Usage, type CountSnapshot, type MetricPoint, type SafeToRemove } from './lifecycle.js';
+import { clientHeaders, deprecationHeaders, endpointDeprecationHeaders, memoryPins, Usage, type CountSnapshot, type MetricPoint, type SafeToRemove } from './lifecycle.js';
 import { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
 
 export type { ClientField, ClientIssue, SchemaParser };
@@ -74,7 +74,7 @@ export type Apiversa = {
   /** Full request or response conversion, including path, query, headers, and trace. */
   prepare(direction: Direction, input: ConvertInput): ExecuteResult;
   /** True when this version and schema need no body parse. */
-  planIsEmpty(version: string, schema: string | undefined, direction: Direction): boolean;
+  planIsEmpty(version: string, schema: string | undefined, direction: Direction, route?: { method?: string; path?: string }): boolean;
   /** Head path translated into the client's field name. A later field is `_head`. */
   clientField(version: string, schema: string, headPath: string): ClientField;
   /** Head-schema issues, rewritten for the client. A passing parse returns undefined. */
@@ -87,6 +87,10 @@ export type Apiversa = {
   upgradeEvent(payload: unknown, schema: string, version: string): unknown;
   /** Deprecation, Sunset, and Link for a deprecated version. Empty when it is not deprecated. */
   deprecationHeaders(version: string): { name: string; value: string }[];
+  /** Deprecation, Sunset, and Link for one deprecated route. Empty when that route is gone or not marked. */
+  endpointDeprecationHeaders(version: string, method: string | undefined, path: string | undefined): { name: string; value: string }[];
+  /** Older HTTP methods that `endpoint.method` sends to this head method and path. */
+  methodShims(headMethod: string, path: string): string[];
   /** Count one request. A client id is counted only when the caller has one. */
   note(version: string, clientId?: string, extra?: { unpinned?: boolean; endpoint?: string }): void;
   /** Versions and changes with no requests in this process. */
@@ -175,8 +179,8 @@ export function api(
       return prepare('down', input).body;
     },
     prepare,
-    planIsEmpty(version, schema, direction) {
-      return bodyPlanEmpty(bundle, version, schema, direction);
+    planIsEmpty(version, schema, direction, route) {
+      return bodyPlanEmpty(bundle, version, schema, direction, route);
     },
     clientField(version, schema, headPath) {
       return clientField(bundle, version, schema, headPath);
@@ -197,6 +201,19 @@ export function api(
     },
     deprecationHeaders(version) {
       return deprecationHeaders(bundle, version);
+    },
+    endpointDeprecationHeaders(version, method, path) {
+      return endpointDeprecationHeaders(bundle, version, method, path);
+    },
+    methodShims(headMethod, path) {
+      const froms: string[] = [];
+      for (const change of bundle.changes) {
+        for (const op of change.ops) {
+          if (op.op !== 'endpoint.method' || op.to !== headMethod || op.path !== path || !op.from) continue;
+          if (!froms.includes(op.from)) froms.push(op.from);
+        }
+      }
+      return froms;
     },
     note(version, clientId, extra) {
       const ids = [...new Set(planFor(bundle, version, 'up').map((step) => `${step.version}.${step.id}`))];

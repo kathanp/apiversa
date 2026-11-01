@@ -1,5 +1,6 @@
 import type { Bundle } from './bundle/load.js';
 import type { PinStore } from './model.js';
+import { decideRoute, pathParams } from './ops/endpoint.js';
 
 export type CountSnapshot = {
   requests: Record<string, number>;
@@ -27,6 +28,28 @@ export function memoryPins(): PinStore {
       saved.set(clientId, date);
     },
   };
+}
+
+/**
+ * RFC 9745 Deprecation for one route. Present on every version where that route still exists.
+ * The `@` date is the change file's version. `Sunset` and `Link` are added only when the op sets them.
+ */
+export function endpointDeprecationHeaders(bundle: Bundle, version: string, method: string | undefined, path: string | undefined): { name: string; value: string }[] {
+  if (!method || !path) return [];
+  const headers: { name: string; value: string }[] = [];
+  for (const change of bundle.changes) {
+    for (const op of change.ops) {
+      if (op.op !== 'endpoint.deprecate' || !op.path || !op.method) continue;
+      if (op.method !== method || !pathParams(op.path, path)) continue;
+      const decision = decideRoute(bundle.changes, version, method, path);
+      if (decision.error?.code === 'AV-E010' || decision.error?.code === 'AV-E011') continue;
+      const epoch = Date.parse(`${change.version}T00:00:00.000Z`) / 1000;
+      headers.push({ name: 'Deprecation', value: `@${epoch}` });
+      if (op.sunset) headers.push({ name: 'Sunset', value: rfc1123(op.sunset) });
+      if (op.docs) headers.push({ name: 'Link', value: `<${op.docs}>; rel="deprecation"` });
+    }
+  }
+  return headers;
 }
 
 /** RFC 9745 Deprecation, RFC 8594 Sunset, and a link to the upgrade guide. Empty when the version is current. */

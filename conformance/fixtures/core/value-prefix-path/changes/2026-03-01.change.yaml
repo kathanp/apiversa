@@ -1,0 +1,10 @@
+version: "2026-03-01"
+id: prefix-id
+description: "Hotel ids gained a prefix."
+changes:
+  - op: endpoint.deprecate
+    method: GET
+    path: /hotels/:id
+  - op: value.prefix
+    target: path:id
+    prefix: h_

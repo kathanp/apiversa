@@ -1,0 +1,13 @@
+version: "2026-03-01"
+id: move-hotel
+description: "Hotel id moved from the path to the query."
+changes:
+  - op: endpoint.rename
+    method: GET
+    from: /hotels/:hotelId/rooms
+    to: /rooms
+  - op: param.move
+    method: GET
+    path: /hotels/:hotelId/rooms
+    from: path:hotelId
+    to: query:hotelId

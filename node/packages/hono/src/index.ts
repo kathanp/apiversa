@@ -24,7 +24,7 @@ export function route(av: Apiversa, decl: RouteDecl): MiddlewareHandler<Apiversa
     try {
       const decision = av.resolveDecision({ headers: headerMap(c), request: c.req.raw, path: url.pathname });
       version = decision.version;
-      for (const header of [...decision.headers, ...av.deprecationHeaders(version)]) c.header(header.name, header.value);
+      for (const header of [...decision.headers, ...av.deprecationHeaders(version), ...av.endpointDeprecationHeaders(version, c.req.method, url.pathname)]) c.header(header.name, header.value);
       av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${c.req.method} ${url.pathname}` });
     } catch (error) {
       if (error instanceof ApiversaError) return c.json(error.envelope(), (error.status ?? 500) as 400);
@@ -32,7 +32,7 @@ export function route(av: Apiversa, decl: RouteDecl): MiddlewareHandler<Apiversa
     }
     if (decl.body) await upgrade(av, c, decl.body, version, url);
     await next();
-    if (!decl.response || av.planIsEmpty(version, decl.response, 'down')) return;
+    if (!decl.response || av.planIsEmpty(version, decl.response, 'down', { method: c.req.method, path: url.pathname })) return;
     await downgrade(av, c, decl.response, version, url);
   };
 }
@@ -41,7 +41,7 @@ async function upgrade(av: Apiversa, c: Context<ApiversaEnv>, schema: string, ve
   const type = c.req.header('content-type') ?? '';
   if (!type.includes('json')) return;
   const raw = (await c.req.json()) as unknown;
-  if (av.planIsEmpty(version, schema, 'up')) {
+  if (av.planIsEmpty(version, schema, 'up', { method: c.req.method, path: url.pathname })) {
     c.set('apiversaBody', raw);
     return;
   }
@@ -74,6 +74,7 @@ async function downgrade(av: Apiversa, c: Context<ApiversaEnv>, schema: string, 
   });
   const headers = new Headers(c.res.headers);
   if (prepared.trace) headers.set('Apiversa-Trace', prepared.trace);
+  for (const header of prepared.headers) headers.set(header.name, header.value);
   c.res = new Response(JSON.stringify(prepared.body), { status: c.res.status, headers });
 }
 

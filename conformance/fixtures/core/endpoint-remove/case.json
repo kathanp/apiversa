@@ -1,0 +1,7 @@
+{
+  "schema": "Hotel",
+  "direction": "up",
+  "version": "2026-03-01",
+  "request": { "method": "GET", "path": "/old", "query": [], "headers": [], "body": null },
+  "error": "AV-E011"
+}

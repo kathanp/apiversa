@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: page-hotels
+description: "Hotel list became a page."
+changes:
+  - op: response.envelope
+    method: GET
+    path: /hotels
+    items: data
+    cursorHeader: X-Cursor

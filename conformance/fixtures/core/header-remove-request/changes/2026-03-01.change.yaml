@@ -1,0 +1,7 @@
+version: "2026-03-01"
+id: header-remove
+description: "Drops Request-Id."
+changes:
+  - op: header.remove
+    name: Request-Id
+    default: "none"

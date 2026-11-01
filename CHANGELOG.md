@@ -2,6 +2,32 @@
 
 One section per track and version. The agent adds one line per finished roadmap ID while building (`- <ID> <title>`). A release renames `(unreleased)` to the release date.
 
+## node 0.21.0 (unreleased)
+
+- CORE-24 Op scope
+- CORE-25 Response envelope
+- CORE-26 Value prefix
+
+## spring 0.15.0 (unreleased)
+
+- CORE-24 Op scope
+- CORE-25 Response envelope
+- CORE-26 Value prefix
+
+## node 0.20.0 (unreleased)
+
+- SHR-04 Request-level conformance cases
+- CORE-22 Method change
+- CORE-23 Parameter relocation
+- CORE-27 Endpoint deprecation
+
+## spring 0.14.0 (unreleased)
+
+- SHR-04 Request-level conformance cases
+- CORE-22 Method change
+- CORE-23 Parameter relocation
+- CORE-27 Endpoint deprecation
+
 ## node 0.19.0 (unreleased)
 
 - DBG-05 Step diff

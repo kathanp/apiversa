@@ -104,6 +104,14 @@ final class VersionedRequest extends ServerHttpRequestDecorator {
     }
 
     @Override
+    public org.springframework.http.HttpMethod getMethod() {
+        if (!ApiversaWebFilter.relevant(exchange)) return getDelegate().getMethod();
+        String rewritten = upgrade(null).method();
+        if (rewritten == null || rewritten.isBlank()) return getDelegate().getMethod();
+        return org.springframework.http.HttpMethod.valueOf(rewritten);
+    }
+
+    @Override
     public HttpHeaders getHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.putAll(getDelegate().getHeaders());
@@ -170,6 +178,8 @@ final class VersionedResponse extends ServerHttpResponseDecorator {
             getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
             for (String[] header : Engine.versionHeaders(properties.getHeader(), new Engine.Decision(version, source instanceof String text ? text : "header"))) getHeaders().set(header[0], header[1]);
             for (String[] header : Engine.deprecationHeaders(bundle, version)) getHeaders().set(header[0], header[1]);
+            String routePath = exchange.getRequest().getURI().getRawPath();
+            for (String[] header : Engine.endpointDeprecationHeaders(bundle, version, exchange.getRequest().getMethod().name(), routePath == null ? "/" : routePath)) getHeaders().set(header[0], header[1]);
             MediaType type = getHeaders().getContentType();
             String schema = ApiversaWebFilter.schema(ApiversaWebFilter.handler(exchange), ApiversaResponse.class);
             if (streaming(type)) return super.writeWith(convertLines(body, sse(type), schema, version));

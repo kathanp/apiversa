@@ -1,0 +1,9 @@
+version: "2026-03-01"
+id: status-change
+description: "Status 200 was 201."
+changes:
+  - op: status.change
+    method: POST
+    path: /hotels
+    from: 201
+    to: 200

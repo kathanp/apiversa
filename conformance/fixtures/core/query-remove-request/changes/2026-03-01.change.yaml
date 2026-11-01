@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: query-remove
+description: "Drops town."
+changes:
+  - op: query.remove
+    method: GET
+    path: /hotels
+    name: town

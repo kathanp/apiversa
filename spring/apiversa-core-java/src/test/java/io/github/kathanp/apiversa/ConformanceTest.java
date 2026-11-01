@@ -9,8 +9,10 @@ import io.github.kathanp.apiversa.Json.SchemaField;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +40,10 @@ class ConformanceTest {
                     for (Map.Entry<?, ?> entry : nested.entrySet()) registry.put(String.valueOf(entry.getKey()), fields(entry.getValue()));
                 }
                 Engine.Bundle bundle = Engine.build(versions, changes, "2026-10-30", registry, Map.of(), null, null, null);
+                if (spec.get("request") instanceof Map<?, ?> request) {
+                    checkRequest(dir.getFileName().toString(), bundle, schema, spec, request);
+                    continue;
+                }
                 Object body = spec.containsKey("raw") ? spec.get("raw") : spec.get("input");
                 try {
                     Engine.Result result = Engine.execute(bundle, new Engine.Request(schema, String.valueOf(spec.get("version")), body, null, null, null, null, null, false, null, false), String.valueOf(spec.get("direction")));
@@ -61,6 +67,56 @@ class ConformanceTest {
         assertEquals("AV-E012", old.code());
         assertEquals(410, old.status());
         assertEquals("</apiversa/upgrade>; rel=\"sunset\"", old.headers().get(0)[1]);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void checkRequest(String name, Engine.Bundle bundle, String schema, Map<String, Object> spec, Map<?, ?> request) {
+        List<String[]> query = pairs(request.get("query"));
+        List<String[]> headers = pairs(request.get("headers"));
+        Integer status = request.get("status") instanceof Number number ? number.intValue() : null;
+        String method = request.get("method") == null ? null : String.valueOf(request.get("method"));
+        String path = request.get("path") == null ? null : String.valueOf(request.get("path"));
+        try {
+            Engine.Result result = Engine.execute(bundle, new Engine.Request(schema, String.valueOf(spec.get("version")), request.get("body"), method, path, query, headers, status, false, null, false), String.valueOf(spec.get("direction")));
+            if (spec.get("error") != null) throw new AssertionError(name + " expected " + spec.get("error"));
+            if (spec.get("response") instanceof Map<?, ?> response) {
+                List<String[]> actualHeaders = new ArrayList<>(result.headers() == null ? List.of() : result.headers());
+                actualHeaders.addAll(Engine.endpointDeprecationHeaders(bundle, String.valueOf(spec.get("version")), method, path));
+                if (response.get("status") != null) assertEquals(((Number) response.get("status")).intValue(), result.status(), name);
+                assertEquals(headerKey(pairs(response.get("headers"))), headerKey(actualHeaders), name);
+                assertEquals(canon(response.get("body")), canon(result.body()), name);
+                return;
+            }
+            Map<String, Object> expected = (Map<String, Object>) spec.get("expected");
+            assertEquals(expected.get("method"), result.method(), name);
+            assertEquals(expected.get("path"), result.path(), name);
+            assertEquals(pairKey(pairs(expected.get("query")), false), pairKey(result.query(), false), name);
+            assertEquals(headerKey(pairs(expected.get("headers"))), headerKey(result.headers()), name);
+            assertEquals(canon(expected.get("body")), canon(result.body()), name);
+        } catch (ApiversaException exception) {
+            assertEquals(spec.get("error"), exception.code(), name);
+        }
+    }
+
+    private static List<String[]> pairs(Object value) {
+        List<String[]> out = new ArrayList<>();
+        if (!(value instanceof List<?> list)) return out;
+        for (Object item : list) {
+            if (item instanceof List<?> pair && pair.size() >= 2) out.add(new String[] {String.valueOf(pair.get(0)), String.valueOf(pair.get(1))});
+        }
+        return out;
+    }
+
+    private static String headerKey(List<String[]> headers) {
+        return pairKey(headers, true);
+    }
+
+    private static String pairKey(List<String[]> pairs, boolean ignoreNameCase) {
+        if (pairs == null) return "";
+        List<String> lines = new ArrayList<>();
+        for (String[] pair : pairs) lines.add((ignoreNameCase ? pair[0].toLowerCase(Locale.ROOT) : pair[0]) + "=" + pair[1]);
+        if (ignoreNameCase) lines.sort(Comparator.naturalOrder());
+        return String.join("\n", lines);
     }
 
     private static ApiversaException assertThrowsCode(org.junit.jupiter.api.function.Executable executable) {

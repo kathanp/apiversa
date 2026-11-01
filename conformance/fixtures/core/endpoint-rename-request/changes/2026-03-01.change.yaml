@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: rename-route
+description: "Renames GET /a/:id to /b/:id."
+changes:
+  - op: endpoint.rename
+    method: GET
+    from: /a/:id
+    to: /b/:id

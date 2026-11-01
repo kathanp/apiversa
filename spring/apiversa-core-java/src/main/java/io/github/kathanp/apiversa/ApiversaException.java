@@ -21,7 +21,8 @@ public final class ApiversaException extends RuntimeException {
             Map.entry("AV-E013", "A draft change file is present."),
             Map.entry("AV-E014", "JSON number cannot be encoded."),
             Map.entry("AV-E015", "Duplicate JSON key."),
-            Map.entry("AV-E016", "Expression could not be read."));
+            Map.entry("AV-E016", "Expression could not be read."),
+            Map.entry("AV-E017", "Parameter target is already set."));
 
     private final String code;
     private final Integer status;
@@ -75,7 +76,7 @@ public final class ApiversaException extends RuntimeException {
             return null;
         }
         return switch (code) {
-            case "AV-E002" -> 400;
+            case "AV-E002", "AV-E017" -> 400;
             case "AV-E004", "AV-E014", "AV-E015", "AV-E016" -> "down".equals(when) ? 500 : 400;
             case "AV-E007" -> 500;
             case "AV-E008", "AV-E009" -> 413;

@@ -14,16 +14,23 @@ export function route(av: Apiversa, decl: RouteDecl, handler: Handler): Handler 
     const decision = av.resolveDecision({ headers: headerMap(request), request, path: url.pathname });
     const version = decision.version;
     let body: unknown = undefined;
-    if (decl.body && !av.planIsEmpty(version, decl.body, 'up')) {
+    const seen = { method: request.method, path: url.pathname };
+    if (decl.body && !av.planIsEmpty(version, decl.body, 'up', seen)) {
       body = av.convertRequest({ schema: decl.body, body: await request.json(), version, path: url.pathname });
     }
-    const next = new Request(request.url, { method: request.method, headers: request.headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const prepared = av.prepare('up', { version, method: request.method, path: url.pathname, query: url.search ? url.search.slice(1) : undefined });
+    const nextUrl = new URL(request.url);
+    if (prepared.path) nextUrl.pathname = prepared.path;
+    if (prepared.query.length > 0) nextUrl.search = prepared.query.map((pair) => `${encodeURIComponent(pair.name)}=${encodeURIComponent(pair.value)}`).join('&');
+    const method = prepared.method ?? request.method;
+    const next = new Request(nextUrl, { method, headers: request.headers, body: body === undefined || method === 'GET' || method === 'HEAD' ? undefined : JSON.stringify(body) });
     const response = await handler(next);
     const headers = new Headers(response.headers);
-    for (const header of [...decision.headers, ...av.deprecationHeaders(version)]) headers.set(header.name, header.value);
-    if (!decl.response || av.planIsEmpty(version, decl.response, 'down')) return new Response(response.body, { status: response.status, headers });
-    const downgraded = av.convertResponse({ schema: decl.response, body: await response.json(), version });
-    return new Response(JSON.stringify(downgraded), { status: response.status, headers });
+    for (const header of [...decision.headers, ...av.deprecationHeaders(version), ...av.endpointDeprecationHeaders(version, method, nextUrl.pathname)]) headers.set(header.name, header.value);
+    if (!decl.response || av.planIsEmpty(version, decl.response, 'down', { method, path: nextUrl.pathname })) return new Response(response.body, { status: response.status, headers });
+    const downgraded = av.prepare('down', { schema: decl.response, body: await response.json(), version, method, path: nextUrl.pathname });
+    for (const header of downgraded.headers) headers.set(header.name, header.value);
+    return new Response(JSON.stringify(downgraded.body), { status: response.status, headers });
   };
 }
 

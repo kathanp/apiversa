@@ -150,10 +150,17 @@ Every operation is pure. It reads one JSON value and returns a new one.
 | `header.remove`  | set `default` on the response when the header is absent | drop the request header when it is present, including an empty value | `name`, `default` |
 | `link.rewrite`   | rewrite a string that matches `to` back to `from` | rewrite a string that matches `from` to `to`     | `schema`, `path`, `from`, `to` |
 | `field.deprecate`| none                                             | none                                             | `schema`, `path`             |
+| `endpoint.method`| none                                             | a request with `from` method on `path` is routed as `to` method | `path`, `from`, `to` |
+| `param.move`     | none                                             | move one value between `path:`, `query:`, `header:`, `body:` locations | `method`, `path`, `from`, `to` |
+| `response.envelope` | replace the page body with its `items` array; optionally copy `cursor` to a response header | none | `method`, `path`, `items` |
+| `value.prefix`   | strip `prefix` from a matching string; with `numeric: true`, a digit-only safe-integer remainder becomes a number | add `prefix` to a string or number (canonical decimal, B7) | `target`, `prefix` |
+| `endpoint.deprecate` | none                                          | none                                             | `method`, `path`             |
 
 An op listed as "none" in one direction is skipped in that direction (B9). Equality in this table is canonical-byte equality (B7). Enum ops leave every non-matching value untouched, including `null` and an absent key.
 
-`header.add`, `header.remove`, `link.rewrite`, and `field.deprecate` join this table when their IDs ship (CORE-18, CORE-19, CORE-20). Until that version, a change file that uses one of them fails startup with `AV-E001`, and `schema/change-file.schema.json` does not list them. Header equality is trimmed string equality, not JSON bytes (B12, B10). `field.deprecate` is "none" in both directions: the body plan skips it, and OpenAPI and the changelog still read it.
+Header equality is trimmed string equality, not JSON bytes (B12, B10). `field.deprecate` is "none" in both directions: the body plan skips it, and OpenAPI and the changelog still read it.
+
+Route patterns use `:param`, as in `endpoint.rename`, and name the route as the older client calls it.
 
 ## B5. Paths and expressions
 
@@ -191,6 +198,7 @@ A change names a **schema** (`Hotel`), not a route. The registry is a graph of n
 - Cycles in the graph are allowed (`Hotel.parent` is a `Hotel`). JSON values are trees. The walk stops at 32 segments (`AV-E004`).
 - When a schema has no field list (a conformance case that omits `fields`), that object keeps input key order, and a key created by an op is appended.
 - A schema may store one discriminator when CORE-21 has shipped: a path plus a map from string values to schema names. Variant changes run only for the matching name. Until that ID ships, registries have no discriminator field.
+- CORE-24 may narrow a field, enum, or object op to listed routes and to `request` or `response`. With no `scope`, the op still runs everywhere the schema appears. `scope` does not make the change name a route.
 
 ## B7. Canonical JSON
 
@@ -249,7 +257,7 @@ A missing key and JSON `null` are different. `null` is a present value.
 
 An op returns a new value. It does not mutate its input (CORE-11).
 
-`AV-E004` on a walk, `AV-E014`, `AV-E015`, and `AV-E016` fail the whole conversion. The copy is discarded. The handler does not run. A response that fails on the way down is discarded too. `downgradeEvent` and queue conversion raise the same code and return no payload.
+`AV-E004` on a walk, `AV-E014`, `AV-E015`, `AV-E016`, and `AV-E017` fail the whole conversion. The copy is discarded. The handler does not run. A response that fails on the way down is discarded too. `downgradeEvent` and queue conversion raise the same code and return no payload. `AV-E017` happens only on the way up.
 
 - Failure on the way up: HTTP `400` and the error envelope (CORE-09, F3).
 - Failure on the way down: HTTP `500` and the same envelope.
@@ -377,6 +385,42 @@ A schema may store one discriminator: a B5 path and a map from strings to schema
 - A change whose schema is a mapped variant runs on a value of the parent schema only when the string at the discriminator path equals that mapping key. A change whose schema is the parent always runs. Unknown, non-string, `null`, and absent discriminator values run the parent changes and skip every variant. That is not an error.
 - Done when: a `card` object gets a `Card` rename and does not get a `BankAccount` rename; a `bank_account` object does the opposite; an unknown `type` gets only the parent changes; an unregistered object is not converted.
 - Refuses: running every variant's ops on one object, or failing the request because the discriminator value is unknown.
+
+#### CORE-22 — Method change
+`endpoint.method` routes an old method to the head method on the same path, for example `POST /search` to `GET /search`. Body-to-query moves are separate `param.move` ops in the same file.
+- Rewriting happens before routing. Express and Koa rewrite `req.method` and `req.url` in middleware ahead of the router. Fastify registers the older method and path as a shim route through `av.route`, which converts and calls the head handler directly, with no second dispatch. Spring uses a servlet `Filter` (WebFlux: `WebFilter`) ahead of dispatch. Hono and Next rewrite the `Request`.
+- Done when: an older `POST /search` reaches the `GET /search` handler; a head `POST /search` gets the framework's normal 404 or 405; the shared adapter suite passes on every adapter that has shipped.
+- Refuses: running two handlers, or changing the method on head requests.
+
+#### CORE-23 — Parameter relocation
+`param.move` moves one value on the way up. `from` and `to` are each `path:<name>`, `query:<name>`, `header:<name>`, or `body:<B5 path>`.
+- Path, query, and header values are strings and move as strings. No type coercion. A body value moving to path, query, or header must be a string, a number (canonical decimal, B7), or a boolean. An array of scalars becomes repeated query parameters, in order. Anything else is `AV-E016`. A path target needs a matching `:name` segment in the head route and is percent-encoded when written.
+- An absent `from` is a no-op. If the target is already present with a different value, the request fails with `AV-E017`. An equal value is fine.
+- Done when: `GET /hotels/:hotelId/rooms` → `GET /rooms?hotelId=` works; a body field moves to a query parameter; a body field moves to a header; a conflict returns `AV-E017`.
+- Refuses: moving in the down direction, merging two sources into one target, or building a regular expression from a pattern.
+
+#### CORE-24 — Op scope
+Any field, enum, or object op may set `scope: { routes: ["GET /hotels/:id", ...], on: request | response }`. Without `scope`, the op runs everywhere the schema appears (B6). This narrows B6 for the ops that set it. `custom` remains the way to handle a route the team does not want in the shared plan.
+- Scope is applied when plans compile (PERF-02) and costs nothing per request. Events count as `response` for `downgradeEvent` and as `request` for `upgradeEvent`. They never match a `routes` filter.
+- Done when: a rename scoped to `on: response` does not run on a `POST` body of the same schema; a `routes` filter limits the op to listed routes; an unknown route pattern fails startup with `AV-E001`.
+- Refuses: wildcard route patterns.
+
+#### CORE-25 — Response envelope
+`response.envelope` serves older clients a bare array when head returns a page `{ data: [...], next_cursor }`. On the way down, the body becomes the value at `items` (default `data`). With `cursorHeader` set, the cursor is written to that response header. Otherwise it is dropped.
+- Older clients get the first page only. This is lossy, and docs must say so.
+- Done when: an older client gets `[...]`; head gets the page; `cursorHeader` carries the cursor; a non-array `items` value is `AV-E016`.
+- Refuses: following cursors to fetch further pages.
+
+#### CORE-26 — Value prefix
+`value.prefix` handles ID format migrations such as `123` → `"h_123"`. `target` is `body:<B5 path>`, `path:<name>`, or `query:<name>`. Path and query targets apply on the way up only. Body targets apply on the way up for requests and on the way down for responses.
+- Up adds `prefix` to a string, or to a number's canonical decimal form. Down strips `prefix` when the string starts with it. With `numeric: true`, a digit-only remainder within ±(2^53−1) is emitted as a number. Non-matching strings, `null`, and absent keys are unchanged.
+- Done when: a path param `/hotels/123` reaches the handler as `h_123`; a response `"h_123"` downgrades to `123` with `numeric: true`; `"x_9"` is unchanged.
+- Refuses: regular expressions, suffixes, or any other string transform. Use `custom` for those.
+
+#### CORE-27 — Endpoint deprecation
+`endpoint.deprecate` marks one route. Every version where the route exists sends `Deprecation` (RFC 9745). With `sunset`, it also sends `Sunset` (RFC 8594) and a `Link` to `docs` when that is set. Per-version OpenAPI marks the operation `deprecated: true` in documents at or after the change. The changelog line is the description. The body is never touched.
+- Done when: the headers are present on an old version and on head; OpenAPI before the change is not marked; one SHR-04 case covers it.
+- Refuses: rejecting the request. Rejection is `endpoint.remove`.
 
 ## C2. Types (TYPE)
 
@@ -644,6 +688,11 @@ Node and Spring both run every case. A success case compares the canonical bytes
 #### SHR-03 — Cross-implementation gate
 A release of either library is blocked while any conformance case fails in the other library at its latest released version.
 
+#### SHR-04 — Request-level conformance cases
+A case may set `request: { method, path, query, headers, body }` instead of `input`, and `expected: { method, path, query, headers, body }` (up) or `response: { status, headers, body }` (down). `query` is an ordered list of `[name, value]` pairs. Header names compare per B12. Body bytes compare per B7. A body-only case (SHR-02) stays valid.
+- Done when: every existing route-level op (`endpoint.*`, `status.change`, `header.*`, `query.*`, `link.rewrite`) has at least one case; Node and Spring both run them.
+- Refuses: an adapter-specific case. Cases describe the request, not the framework.
+
 ## C14. Client (CLIENT)
 
 #### CLIENT-01 — Typed client
@@ -795,6 +844,7 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 | `AV-E014` | 400 on the way up, 500 on the way down | JSON number cannot be encoded. |
 | `AV-E015` | 400 on the way up, 500 on the way down | Duplicate JSON key. |
 | `AV-E016` | 400 on the way up, 500 on the way down | Expression could not be read. |
+| `AV-E017` | 400 | Parameter target is already set. |
 
 `supportedVersions` is present on every HTTP error and lists the bundle dates, newest first. `AV-E012` also sends the Sunset link required by CORE-02. `AV-E002` carries the supported dates in `supportedVersions`, not in `message`.
 
@@ -819,6 +869,12 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 - Telemetry or phone-home of any kind.
 - AI inside the runtime.
 - Rewriting business logic. apiversa converts data shapes; it does not run old handlers except `endpoint.remove` legacy handlers the team keeps.
+- Endpoint split (one old call becomes N new calls). It would run handlers more than once and can fail partway, which breaks B11. Use `endpoint.remove` plus `legacyHandler`.
+- Endpoint merge (N old calls become one batch call). It needs state across requests.
+- Sync to async (an old `200` versus a new `202` plus polling). The downgrade would have to wait or poll. Use `legacyHandler`.
+- Expanded versus ID-only nested objects (Stripe `expand`). The downgrade would load data from a database or the network, which breaks purity and the no-network rule. Revisit only with an external `issue:`.
+- Offset to cursor pagination. Cursors are opaque to apiversa, so this needs a host hook. Use `custom` until someone asks.
+- XML/JSON negotiation.
 
 ---
 
@@ -842,7 +898,7 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
    - the tarball install test and, after publish, the stranger check pass;
    - no open hard stop and no red run on `next` in the last 24 hours.
 
-## H1. Node track (20 versions)
+## H1. Node track (22 versions)
 
 Each version has one theme. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar. `[x]` after an ID means that ID is implemented and its tests passed. It does not mean the package is published.
 
@@ -982,12 +1038,25 @@ Theme: inspect a body and see who never pinned.
 - **OBS-02** [x] Unpinned counter — Evidence: eval:docs/evals/obs-02.md
 - **DOC-07** [x] Upgrade matrix — Evidence: eval:docs/evals/doc-07.md
 
+### node 0.20.0
+Theme: route-level conversion you can test.
+- **SHR-04** [x] Request-level conformance cases — Evidence: eval:docs/evals/shr-04.md
+- **CORE-22** [x] Method change — Evidence: eval:docs/evals/core-22.md
+- **CORE-23** [x] Parameter relocation — Evidence: eval:docs/evals/core-23.md
+- **CORE-27** [x] Endpoint deprecation — Evidence: eval:docs/evals/core-27.md
+
+### node 0.21.0
+Theme: reshape what one route returns.
+- **CORE-24** [x] Op scope — Evidence: eval:docs/evals/core-24.md
+- **CORE-25** [x] Response envelope — Evidence: eval:docs/evals/core-25.md
+- **CORE-26** [x] Value prefix — Evidence: eval:docs/evals/core-26.md
+
 ### node 1.0.0
 - API freeze per `docs/STABILITY.md`. No new IDs. Requires at least one production user named in `docs/DECISIONS.md` with their consent. Major release: the agent prepares it and stops.
 
-## H2. Spring track (14 versions)
+## H2. Spring track (16 versions)
 
-Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite. Spring 0.10.0 through 0.13.0 are the same IDs as node 0.16.0 through 0.19.0.
+Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite. Spring 0.10.0 through 0.15.0 are the same IDs as node 0.16.0 through 0.21.0.
 
 ### spring 0.1.0
 Theme: usable core on Spring MVC, with docs and the CI gate. Same behavior as node 0.1.0. FW-01 and FW-02 are SPR-01 and SPR-04. TYPE-01's ordered fields are the schema registry. TEST-05's helpers are SPR-09.
@@ -1083,6 +1152,19 @@ Theme: inspect a body and see who never pinned. Same IDs as node 0.19.0.
 - **DBG-05** [x] Step diff — Evidence: eval:docs/evals/dbg-05.md
 - **OBS-02** [x] Unpinned counter — Evidence: eval:docs/evals/obs-02.md
 - **DOC-07** [x] Upgrade matrix — Evidence: eval:docs/evals/doc-07.md
+
+### spring 0.14.0
+Theme: route-level conversion you can test. Same IDs as node 0.20.0.
+- **SHR-04** [x] Request-level conformance cases — Evidence: eval:docs/evals/shr-04.md
+- **CORE-22** [x] Method change — Evidence: eval:docs/evals/core-22.md
+- **CORE-23** [x] Parameter relocation — Evidence: eval:docs/evals/core-23.md
+- **CORE-27** [x] Endpoint deprecation — Evidence: eval:docs/evals/core-27.md
+
+### spring 0.15.0
+Theme: reshape what one route returns. Same IDs as node 0.21.0.
+- **CORE-24** [x] Op scope — Evidence: eval:docs/evals/core-24.md
+- **CORE-25** [x] Response envelope — Evidence: eval:docs/evals/core-25.md
+- **CORE-26** [x] Value prefix — Evidence: eval:docs/evals/core-26.md
 
 ### spring 1.0.0
 - API freeze. Same rule as node 1.0.0. Major release: the agent prepares it and stops.

@@ -1,16 +1,19 @@
 import { ApiversaError, type Direction } from '../errors.js';
-import { isArray } from '../json/value.js';
+import { isArray, type JValue } from '../json/value.js';
 import { fromPlain, parseJson, toPlain, type Registry } from '../json/parse.js';
 import type { Limits } from '../limits.js';
 import type { Bundle } from '../bundle/load.js';
 import { planFor, type Planned } from '../bundle/load.js';
 import type { HeaderPair, QueryPair } from '../model.js';
 import { applyData } from '../ops/apply.js';
-import { decideRoute } from '../ops/endpoint.js';
+import { decideRoute, pathParams } from '../ops/endpoint.js';
 import { headerAdd, headerRemove } from '../ops/headerChange.js';
 import { headerRename } from '../ops/headerRename.js';
 import { queryAdd } from '../ops/queryAdd.js';
 import { queryRemove } from '../ops/queryRemove.js';
+import { unwrapEnvelope } from '../ops/envelope.js';
+import { moveParam } from '../ops/paramMove.js';
+import { applyPrefix } from '../ops/prefix.js';
 import { queryRename } from '../ops/queryRename.js';
 import { statusChange } from '../ops/statusChange.js';
 
@@ -33,6 +36,7 @@ export type ExecuteInput = {
 export type ExecuteResult = {
   body: unknown;
   path: string;
+  method?: string;
   query: QueryPair[];
   headers: HeaderPair[];
   status?: number;
@@ -42,20 +46,50 @@ export type ExecuteResult = {
 };
 
 export function execute(bundle: Bundle, input: ExecuteInput, direction: Direction): ExecuteResult {
-  const route = direction === 'up' ? decideRoute(bundle.changes, input.version, input.method, input.path) : { path: input.path ?? '' };
+  const route = direction === 'up' ? decideRoute(bundle.changes, input.version, input.method, input.path) : { path: input.path ?? '', method: input.method };
   if (route.error) {
     route.error.supportedVersions.splice(0, route.error.supportedVersions.length, ...bundle.dates);
     throw route.error;
   }
-  const steps = planFor(bundle, input.version, direction).filter((step) => step.op.op !== 'error.shape' || direction === 'down');
+  const steps = planFor(bundle, input.version, direction, { method: input.method, path: input.path }).filter((step) => step.op.op !== 'error.shape' || direction === 'down');
   const bodySteps = steps.filter((step) => isBodyStep(step, input, direction));
   let query = input.query ? input.query.map((pair) => ({ ...pair })) : [];
   let headers = input.headers ? input.headers.map((pair) => ({ ...pair })) : [];
   let status = input.status;
   let body = input.body;
   let parsed = false;
-  if (bodySteps.length === 0 && steps.every((step) => !isMeta(step.op.op))) {
-    return finish(bundle, input, direction, steps, { body, path: route.path, query, headers, status, legacyHandler: route.legacyHandler, parsed });
+  let pathNow = route.path;
+  const methodNow = route.method ?? input.method;
+  let currentJson: JValue | undefined;
+  const applyMove = (step: Planned, json: JValue | undefined): JValue | undefined => {
+    const needsBody = `${step.op.from ?? ''}${step.op.to ?? ''}`.includes('body:');
+    let next = json;
+    if (needsBody && next === undefined && body !== undefined) {
+      next = adopt(body, direction, bundle.limits);
+      parsed = true;
+    }
+    const moved = moveParam({
+      op: step.op,
+      method: input.method,
+      rewrittenMethod: methodNow,
+      originalPath: input.path ?? '',
+      path: pathNow,
+      query,
+      headers,
+      body: next,
+      changes: bundle.changes,
+    });
+    pathNow = moved.path;
+    query = moved.query;
+    headers = moved.headers;
+    if (moved.body !== undefined) {
+      body = materialize(moved.body, input.schema, bundle.registry);
+      return moved.body;
+    }
+    return next;
+  };
+  if (bodySteps.length === 0 && steps.every((step) => !isMeta(step.op))) {
+    return finish(bundle, input, direction, steps, { body, path: pathNow, method: methodNow, query, headers, status, legacyHandler: route.legacyHandler, parsed });
   }
   if (bodySteps.length > 0 && body !== undefined) {
     let json;
@@ -64,14 +98,27 @@ export function execute(bundle: Bundle, input: ExecuteInput, direction: Directio
     } catch (error) {
       if (error instanceof ApiversaError && error.code === 'AV-E008' && bundle.oversize === 'passthrough' && direction === 'down') {
         console.warn('apiversa: oversized body passed through as the head shape');
-        return finish(bundle, input, direction, steps, { body, path: route.path, query, headers, status, legacyHandler: route.legacyHandler, parsed: false });
+        return finish(bundle, input, direction, steps, { body, path: pathNow, method: methodNow, query, headers, status, legacyHandler: route.legacyHandler, parsed: false });
       }
       throw error;
     }
     parsed = true;
     let current = json;
     for (const step of steps) {
-      if (isBodyOp(step.op.op) && appliesTo(bundle.registry, input.schema, step.op.schema)) {
+      if (step.op.op === 'response.envelope' || step.op.op === 'value.prefix') {
+        touch(input, step, direction, () => {
+          applyRouteOp(step, input, direction, bundle, () => current, (next) => {
+            current = next;
+          }, {
+            get path() { return pathNow; },
+            set path(value) { pathNow = value; },
+            get query() { return query; },
+            set query(value) { query = value; },
+            get headers() { return headers; },
+            set headers(value) { headers = value; },
+          });
+        });
+      } else if (isBodyOp(step.op) && appliesTo(bundle.registry, input.schema, step.op.schema)) {
         if (step.op.op === 'error.shape') {
           if (input.isError || (status !== undefined && status >= 400)) {
             touch(input, step, direction, () => {
@@ -95,6 +142,10 @@ export function execute(bundle: Bundle, input: ExecuteInput, direction: Directio
         touch(input, step, direction, () => {
           status = statusChange(status, step.op, direction);
         });
+      } else if (step.op.op === 'param.move') {
+        touch(input, step, direction, () => {
+          current = applyMove(step, current) ?? current;
+        });
       }
     }
     body = materialize(current, input.schema, bundle.registry);
@@ -112,10 +163,27 @@ export function execute(bundle: Bundle, input: ExecuteInput, direction: Directio
         touch(input, step, direction, () => {
           status = statusChange(status, step.op, direction);
         });
+      } else if (step.op.op === 'param.move') {
+        touch(input, step, direction, () => {
+          currentJson = applyMove(step, currentJson);
+        });
+      } else if (step.op.op === 'value.prefix' || step.op.op === 'response.envelope') {
+        touch(input, step, direction, () => {
+          applyRouteOp(step, input, direction, bundle, () => currentJson, (next) => {
+            currentJson = next;
+          }, {
+            get path() { return pathNow; },
+            set path(value) { pathNow = value; },
+            get query() { return query; },
+            set query(value) { query = value; },
+            get headers() { return headers; },
+            set headers(value) { headers = value; },
+          });
+        });
       }
     }
   }
-  return finish(bundle, input, direction, steps, { body, path: route.path, query, headers, status, legacyHandler: route.legacyHandler, parsed });
+  return finish(bundle, input, direction, steps, { body, path: pathNow, method: methodNow, query, headers, status, legacyHandler: route.legacyHandler, parsed });
 }
 
 function finish(
@@ -161,19 +229,50 @@ function adopt(body: unknown, direction: Direction, limits: Limits) {
   return fromPlain(body, direction, limits);
 }
 
-export function bodyPlanEmpty(bundle: Bundle, version: string, schema: string | undefined, direction: Direction): boolean {
-  return !planFor(bundle, version, direction).some(
-    (step) => isBodyOp(step.op.op) && step.op.op !== 'error.shape' && appliesTo(bundle.registry, schema, step.op.schema),
+export function bodyPlanEmpty(bundle: Bundle, version: string, schema: string | undefined, direction: Direction, route?: { method?: string; path?: string }): boolean {
+  return !planFor(bundle, version, direction, route).some(
+    (step) => isBodyOp(step.op) && step.op.op !== 'error.shape' && appliesTo(bundle.registry, schema, step.op.schema),
   );
 }
 
-function isBodyOp(op: string): boolean {
-  if (op === 'field.deprecate') return false;
-  return op.startsWith('field.') || op.startsWith('enum.') || op === 'object.wrap' || op === 'custom' || op === 'error.shape' || op === 'link.rewrite';
+function isBodyOp(op: Planned['op']): boolean {
+  if (op.op === 'field.deprecate') return false;
+  if (op.op === 'response.envelope') return true;
+  if (op.op === 'value.prefix') return (op.target ?? '').startsWith('body:');
+  return op.op.startsWith('field.') || op.op.startsWith('enum.') || op.op === 'object.wrap' || op.op === 'custom' || op.op === 'error.shape' || op.op === 'link.rewrite';
 }
 
-function isMeta(op: string): boolean {
-  return op.startsWith('query.') || op.startsWith('header.') || op === 'status.change';
+function isMeta(op: Planned['op']): boolean {
+  if (op.op === 'value.prefix') return !(op.target ?? '').startsWith('body:');
+  return op.op.startsWith('query.') || op.op.startsWith('header.') || op.op === 'status.change' || op.op === 'param.move';
+}
+
+function applyRouteOp(
+  step: Planned,
+  input: ExecuteInput,
+  direction: Direction,
+  bundle: Bundle,
+  read: () => JValue | undefined,
+  write: (value: JValue) => void,
+  state: { path: string; query: ExecuteResult['query']; headers: ExecuteResult['headers'] },
+): void {
+  if (step.op.op === 'response.envelope') {
+    if (direction !== 'down' || !envelopeMatches(step.op, input.method, input.path)) return;
+    const body = read();
+    if (body === undefined) return;
+    write(unwrapEnvelope(body, step.op, state.headers));
+    return;
+  }
+  const next = { path: state.path, query: state.query, body: read() };
+  applyPrefix(next, step.op, direction, bundle.changes);
+  state.path = next.path;
+  state.query = next.query;
+  if (next.body !== undefined) write(next.body);
+}
+
+function envelopeMatches(op: Planned['op'], method: string | undefined, path: string | undefined): boolean {
+  if (!op.method || !op.path || !method || !path) return false;
+  return op.method === method && pathParams(op.path, path) !== undefined;
 }
 
 function applyHeader(headers: HeaderPair[], op: Planned['op'], direction: Direction): HeaderPair[] {
@@ -194,7 +293,7 @@ function touch(input: ExecuteInput, step: Planned, direction: Direction, run: ()
 }
 
 function isBodyStep(step: Planned, input: ExecuteInput, direction: Direction): boolean {
-  if (!isBodyOp(step.op.op)) return false;
+  if (!isBodyOp(step.op)) return false;
   if (step.op.op === 'error.shape') return direction === 'down' && (input.isError === true || (input.status !== undefined && input.status >= 400));
   if (input.isError || (direction === 'down' && input.status !== undefined && input.status >= 400)) return false;
   return true;

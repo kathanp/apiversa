@@ -1,0 +1,8 @@
+{
+  "schema": "Page",
+  "fields": ["data", "next_cursor"],
+  "direction": "down",
+  "version": "2026-01-15",
+  "request": { "method": "GET", "path": "/hotels", "query": [], "headers": [], "body": { "data": [{ "id": "h_1" }], "next_cursor": "c1" } },
+  "response": { "headers": [["X-Cursor", "c1"]], "body": [{ "id": "h_1" }] }
+}
