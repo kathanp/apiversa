@@ -834,8 +834,8 @@ Theme: correct errors and contract tests.
 
 ### node 0.9.0
 Theme: versioned webhooks.
-- **EVT-01** Downgrade an outgoing event — Evidence: stripe
-- **EVT-02** Subscriber pins — Evidence: stripe
+- **EVT-01** [x] Downgrade an outgoing event — Evidence: stripe
+- **EVT-02** [x] Subscriber pins — Evidence: stripe
 
 ### node 0.10.0
 Theme: lifecycle.
@@ -952,8 +952,8 @@ Theme: modern JVM.
 
 ### spring 0.9.0
 Theme: parity and replay.
-- **SHR-03** Cross-implementation gate — Evidence: adoption
-- **TEST-07** Traffic replay — Evidence: safety
+- **SHR-03** [x] Cross-implementation gate — Evidence: adoption
+- **TEST-07** [x] Traffic replay — Evidence: safety
 
 ### spring 1.0.0
 - API freeze. Same rule as node 1.0.0. Major release: the agent prepares it and stops.

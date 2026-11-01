@@ -134,3 +134,13 @@ One section per track and version. The agent adds one line per finished roadmap 
 
 - SPR-11 GraalVM native image
 - SPR-12 Kotlin
+
+## node 0.9.0 (unreleased)
+
+- EVT-01 Downgrade an outgoing event
+- EVT-02 Subscriber pins
+
+## spring 0.9.0 (unreleased)
+
+- SHR-03 Cross-implementation gate
+- TEST-07 Traffic replay

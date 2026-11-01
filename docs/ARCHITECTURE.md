@@ -16,7 +16,7 @@ The Node core (`apiversa`) has no runtime dependencies. Framework adapters list 
 6. The plan runs the `down` operations of the same changes, newest first, on the response body (or error body). Arrays and paginated lists convert item by item. Streams convert per line or event.
 7. Deprecated versions get `Deprecation`, `Sunset`, and `Link` headers. Counters record the version and each change used.
 
-Outgoing webhooks use the same `down` path through `downgradeEvent`. A Kafka consumer upgrades the record value from the `Api-Version` header. A producer downgrades it. SQS and RabbitMQ call that same header-map conversion.
+Outgoing webhooks use the same `down` path through `downgradeEvent`. A subscriber pin selects that version. A missing pin is `AV-E002`. A Kafka consumer upgrades the record value from the `Api-Version` header. A producer downgrades it. SQS and RabbitMQ call that same header-map conversion.
 
 ## Layout
 
