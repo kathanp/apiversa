@@ -112,3 +112,14 @@ One section per track and version. The agent adds one line per finished roadmap 
 
 - SPR-07 Kafka messages
 - EVT-03 Message queues
+
+## node 0.7.0 (unreleased)
+
+- STR-01 Lists and pagination
+- STR-02 NDJSON and SSE
+- CORE-14 Form bodies
+
+## spring 0.7.0 (unreleased)
+
+- CORE-14 Form bodies
+- TEST-08 Fuzz suite

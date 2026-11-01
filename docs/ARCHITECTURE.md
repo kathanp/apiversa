@@ -11,7 +11,7 @@ The Node core (`apiversa`) has no runtime dependencies. Framework adapters list 
 1. The adapter (Express, Fastify, NestJS, Hono, Spring MVC, or Spring WebFlux) sees the request on a route registered with apiversa. Unregistered routes are untouched.
 2. The resolver finds the version: `Api-Version` header → host resolver (for example the API key's pin) → the `default` policy. Unknown, future, or retired dates end here with `AV-E002`, `AV-E003`, or `AV-E012`.
 3. Head version: nothing else happens (PERF-01). The handler runs.
-4. Older version: the precompiled plan for (route, version) runs the `up` operations of every newer change, oldest first, on the request body, headers, and path. Keys `__proto__`, `constructor`, `prototype` are dropped.
+4. Older version: the precompiled plan for (route, version) runs the `up` operations of every newer change, oldest first, on the request body, headers, and path. A form body's text fields take the same ops. A file part is copied. Keys `__proto__`, `constructor`, `prototype` are dropped.
 5. The handler runs once, at head.
 6. The plan runs the `down` operations of the same changes, newest first, on the response body (or error body). Arrays and paginated lists convert item by item. Streams convert per line or event.
 7. Deprecated versions get `Deprecation`, `Sunset`, and `Link` headers. Counters record the version and each change used.

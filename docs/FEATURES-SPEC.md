@@ -822,9 +822,9 @@ Theme: more frameworks.
 
 ### node 0.7.0
 Theme: lists, streams and forms.
-- **STR-01** Lists and pagination — Evidence: cadwyn
-- **STR-02** NDJSON and SSE — Evidence: adoption
-- **CORE-14** Form bodies — Evidence: adoption
+- **STR-01** [x] Lists and pagination — Evidence: cadwyn
+- **STR-02** [x] NDJSON and SSE — Evidence: adoption
+- **CORE-14** [x] Form bodies — Evidence: adoption
 
 ### node 0.8.0
 Theme: correct errors and contract tests.
@@ -942,8 +942,8 @@ Theme: messages.
 
 ### spring 0.7.0
 Theme: forms and fuzzing.
-- **CORE-14** Form bodies — Evidence: adoption
-- **TEST-08** Fuzz suite — Evidence: safety
+- **CORE-14** [x] Form bodies — Evidence: adoption
+- **TEST-08** [x] Fuzz suite — Evidence: safety
 
 ### spring 0.8.0
 Theme: modern JVM.
