@@ -123,3 +123,14 @@ One section per track and version. The agent adds one line per finished roadmap 
 
 - CORE-14 Form bodies
 - TEST-08 Fuzz suite
+
+## node 0.8.0 (unreleased)
+
+- CORE-15 Validation errors in the client's terms
+- TEST-02 Contract fixtures
+- TEST-03 Change coverage
+
+## spring 0.8.0 (unreleased)
+
+- SPR-11 GraalVM native image
+- SPR-12 Kotlin

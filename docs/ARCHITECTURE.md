@@ -12,7 +12,7 @@ The Node core (`apiversa`) has no runtime dependencies. Framework adapters list 
 2. The resolver finds the version: `Api-Version` header → host resolver (for example the API key's pin) → the `default` policy. Unknown, future, or retired dates end here with `AV-E002`, `AV-E003`, or `AV-E012`.
 3. Head version: nothing else happens (PERF-01). The handler runs.
 4. Older version: the precompiled plan for (route, version) runs the `up` operations of every newer change, oldest first, on the request body, headers, and path. A form body's text fields take the same ops. A file part is copied. Keys `__proto__`, `constructor`, `prototype` are dropped.
-5. The handler runs once, at head.
+5. The handler runs once, at head. When the head schema rejects the upgraded request, the error paths are translated back to the client's field names. A field the client never had is reported as `_head`.
 6. The plan runs the `down` operations of the same changes, newest first, on the response body (or error body). Arrays and paginated lists convert item by item. Streams convert per line or event.
 7. Deprecated versions get `Deprecation`, `Sunset`, and `Link` headers. Counters record the version and each change used.
 
@@ -53,6 +53,7 @@ Outgoing webhooks use the same `down` path through `downgradeEvent`. A Kafka con
 | `spring/apiversa-actuator/`            | Read-only `/actuator/apiversa`                               |
 | `spring/apiversa-webflux/`             | WebFlux filter: same conversion, plus NDJSON and SSE lines   |
 | `spring/apiversa-kafka/`               | Kafka records and queue message conversion                   |
+| `spring/apiversa-kotlin/`              | Kotlin converter DSL and client-field extension              |
 
 Rows marked (planned) do not exist yet. When the agent creates a path, it removes "(planned)" from that row in the same commit. The guard fails on a row that names a missing path without "(planned)".
 

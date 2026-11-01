@@ -828,9 +828,9 @@ Theme: lists, streams and forms.
 
 ### node 0.8.0
 Theme: correct errors and contract tests.
-- **CORE-15** Validation errors in the client's terms — Evidence: safety
-- **TEST-02** Contract fixtures — Evidence: adoption
-- **TEST-03** Change coverage — Evidence: adoption
+- **CORE-15** [x] Validation errors in the client's terms — Evidence: safety
+- **TEST-02** [x] Contract fixtures — Evidence: adoption
+- **TEST-03** [x] Change coverage — Evidence: adoption
 
 ### node 0.9.0
 Theme: versioned webhooks.
@@ -947,8 +947,8 @@ Theme: forms and fuzzing.
 
 ### spring 0.8.0
 Theme: modern JVM.
-- **SPR-11** GraalVM native image — Evidence: adoption
-- **SPR-12** Kotlin — Evidence: adoption
+- **SPR-11** [x] GraalVM native image — Evidence: adoption
+- **SPR-12** [x] Kotlin — Evidence: adoption
 
 ### spring 0.9.0
 Theme: parity and replay.
