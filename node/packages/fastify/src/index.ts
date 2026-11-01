@@ -20,6 +20,8 @@ export function apiversa(av: Apiversa): FastifyPluginAsync {
       const version = safeVersion(av, req, reply);
       if (!version) return;
       (req as unknown as Record<symbol, string>)[versionKey] = version;
+      for (const header of av.deprecationHeaders(version)) reply.header(header.name, header.value);
+      av.note(version);
       if (!decl.body || av.planIsEmpty(version, decl.body, 'up')) return;
       const prepared = av.prepare('up', {
         schema: decl.body,

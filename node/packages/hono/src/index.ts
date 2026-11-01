@@ -23,6 +23,8 @@ export function route(av: Apiversa, decl: RouteDecl): MiddlewareHandler<Apiversa
     let version: string;
     try {
       version = av.resolveVersion({ headers: headerMap(c), request: c.req.raw });
+      for (const header of av.deprecationHeaders(version)) c.header(header.name, header.value);
+      av.note(version);
     } catch (error) {
       if (error instanceof ApiversaError) return c.json(error.envelope(), (error.status ?? 500) as 400);
       throw error;

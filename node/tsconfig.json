@@ -6,6 +6,7 @@
     { "path": "packages/express" },
     { "path": "packages/fastify" },
     { "path": "packages/nest" },
-    { "path": "packages/hono" }
+    { "path": "packages/hono" },
+    { "path": "packages/pin-redis" }
   ]
 }

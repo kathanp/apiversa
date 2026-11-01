@@ -40,6 +40,8 @@ export function route(av: Apiversa, decl: RouteDecl): RequestHandler {
     let version: string;
     try {
       version = av.resolveVersion({ headers: request.headers, request });
+      for (const header of av.deprecationHeaders(version)) response.setHeader(header.name, header.value);
+      av.note(version);
       const emptyUp = !decl.body || av.planIsEmpty(version, decl.body, 'up');
       const emptyDown = !decl.response || av.planIsEmpty(version, decl.response, 'down');
       const type = contentType(request.headers);

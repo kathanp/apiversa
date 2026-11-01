@@ -10,6 +10,8 @@ import { parseYaml } from '../yaml/parse.js';
 
 export type Policy = 'latest' | 'oldest' | 'pin-on-first-call';
 
+export type VersionInfo = { date: string; deprecated: boolean; sunset?: string };
+
 export type Bundle = {
   head: string;
   dates: string[];
@@ -21,6 +23,7 @@ export type Bundle = {
   limits: Limits;
   pins?: PinStore;
   oversize: 'error' | 'passthrough';
+  versionInfo: VersionInfo[];
 };
 
 const DATE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
@@ -100,6 +103,7 @@ export function buildBundle(
     limits: options?.limits ?? DEFAULT_LIMITS,
     pins,
     oversize: options?.oversize ?? 'error',
+    versionInfo: versions.versions.map((item) => ({ date: item.date, deprecated: item.deprecated === true, sunset: item.sunset })),
   };
 }
 

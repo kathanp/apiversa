@@ -15,4 +15,5 @@ export { toMatchVersion } from './testing.js';
 export { downgradeNdjson, downgradeNdjsonLine, downgradeSse, downgradeSseLine } from './stream.js';
 export { convertForm, type FormResult } from './form.js';
 export { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
+export { memoryPins, type CountSnapshot, type MetricPoint } from './lifecycle.js';
 export { testBundle, type ContractResult } from './cli/contract.js';

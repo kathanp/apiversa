@@ -1,9 +1,12 @@
 import type { Direction } from './errors.js';
 import { ApiversaError, fail } from './errors.js';
-import { loadBundle, type Bundle } from './bundle/load.js';
+import { loadBundle, planFor, type Bundle } from './bundle/load.js';
+import { deprecationHeaders, memoryPins, Usage, type CountSnapshot, type MetricPoint } from './lifecycle.js';
 import { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
 
 export type { ClientField, ClientIssue, SchemaParser };
+export { memoryPins };
+export type { CountSnapshot, MetricPoint };
 import { bodyPlanEmpty, execute, type ExecuteResult } from './chain/run.js';
 import { DEFAULT_LIMITS } from './limits.js';
 import type { Converter, HeaderPair, PinStore, QueryPair } from './model.js';
@@ -48,6 +51,8 @@ export type CreateOptions = {
   trace?: boolean;
   /** Deep-freeze converter inputs. Defaults to on outside production. */
   development?: boolean;
+  /** Called with the in-memory counters after each noted request. The hook must not be used to open a socket inside apiversa. */
+  onCount?: (snapshot: CountSnapshot) => void;
 };
 
 export type Apiversa = {
@@ -69,6 +74,16 @@ export type Apiversa = {
   downgradeEvent(payload: unknown, schema: string, version: string): unknown;
   /** Downgrade using the subscriber's pin. A missing pin is AV-E002. */
   downgradeForSubscriber(payload: unknown, schema: string, subscriberId: string): unknown;
+  /** Deprecation, Sunset, and Link for a deprecated version. Empty when it is not deprecated. */
+  deprecationHeaders(version: string): { name: string; value: string }[];
+  /** Count one request. A client id is counted only when the caller has one. */
+  note(version: string, clientId?: string): void;
+  /** In-memory request, conversion, and client counts. */
+  stats(): CountSnapshot;
+  /** Prometheus text. The host scrapes it. apiversa does not send it. */
+  prometheus(): string;
+  /** Metric points a host can hand to its own OpenTelemetry meter. */
+  metrics(): MetricPoint[];
 };
 
 /**
@@ -78,6 +93,7 @@ export type Apiversa = {
 export function createApiversa(options: CreateOptions): Apiversa {
   const development = options.development ?? process.env.NODE_ENV !== 'production';
   const trace = options.trace === true || (development && options.trace !== false);
+  const usage = new Usage();
   const bundle = loadBundle(options.dir, {
     registry: options.schemas ?? {},
     converters: options.converters,
@@ -88,13 +104,14 @@ export function createApiversa(options: CreateOptions): Apiversa {
     },
     oversize: options.oversize,
   });
-  return api(bundle, { header: options.header ?? 'Api-Version', resolve: options.resolve, development, trace });
+  return api(bundle, { header: options.header ?? 'Api-Version', resolve: options.resolve, development, trace, usage, onCount: options.onCount });
 }
 
 export function api(
   bundle: Bundle,
-  opts: { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean },
+  opts: { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean; usage?: Usage; onCount?: (snapshot: CountSnapshot) => void },
 ): Apiversa {
+  const usage = opts.usage ?? new Usage();
   function hostVersion(input: { headers?: HeaderInput; request?: unknown }): string | undefined {
     if (readHeader(input.headers, opts.header).length > 0) return undefined;
     if (input.request === undefined || !opts.resolve) return undefined;
@@ -150,6 +167,23 @@ export function api(
       const pinned = subscriberId ? bundle.pins?.get(subscriberId) : undefined;
       if (!bundle.pins || !subscriberId || !pinned) throw fail('AV-E002', 'down', 'no pin for subscriber', bundle.dates);
       return prepare('down', { schema, body: payload, version: pinned }).body;
+    },
+    deprecationHeaders(version) {
+      return deprecationHeaders(bundle, version);
+    },
+    note(version, clientId) {
+      const ids = [...new Set(planFor(bundle, version, 'up').map((step) => `${step.version}.${step.id}`))];
+      usage.record(version, clientId, ids);
+      opts.onCount?.(usage.snapshot());
+    },
+    stats() {
+      return usage.snapshot();
+    },
+    prometheus() {
+      return usage.prometheus();
+    },
+    metrics() {
+      return usage.metrics();
     },
   };
 }
