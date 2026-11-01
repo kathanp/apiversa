@@ -14,6 +14,7 @@ import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -31,6 +32,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /** Boot 3 auto-configuration. Framework 7 hosts can call {@link Engine#resolve} from their own resolver. */
 @AutoConfiguration
+@ImportRuntimeHints(ApiversaRuntimeHints.class)
 @ConditionalOnWebApplication
 @ConditionalOnClass(DispatcherServlet.class)
 @EnableConfigurationProperties(ApiversaProperties.class)

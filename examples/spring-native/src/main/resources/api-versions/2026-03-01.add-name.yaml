@@ -1,0 +1,8 @@
+version: "2026-03-01"
+id: add-name
+description: Hotel.name was added.
+changes:
+  - op: field.add
+    schema: Hotel
+    path: name
+    default: Bay

@@ -1,0 +1,12 @@
+[
+  { "name": "io.github.kathanp.apiversa.Engine", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.YamlDocs", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.Json", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.SchemaCheck", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.FormBodies", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.spring.ApiversaAutoConfiguration", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.spring.ApiversaProperties", "allDeclaredConstructors": true, "allPublicMethods": true, "allDeclaredFields": true },
+  { "name": "io.github.kathanp.apiversa.spring.VersionChange", "allDeclaredMethods": true },
+  { "name": "org.snakeyaml.engine.v2.api.Load", "allDeclaredConstructors": true, "allPublicMethods": true },
+  { "name": "org.snakeyaml.engine.v2.schema.JsonSchema", "allDeclaredConstructors": true, "allPublicMethods": true }
+]
