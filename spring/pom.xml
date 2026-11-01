@@ -17,6 +17,7 @@
     <module>apiversa-actuator</module>
     <module>apiversa-webflux</module>
     <module>apiversa-kafka</module>
+    <module>apiversa-kotlin</module>
   </modules>
   <properties>
     <revision>0.1.0</revision>

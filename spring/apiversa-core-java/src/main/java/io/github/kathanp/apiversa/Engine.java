@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import org.jspecify.annotations.Nullable;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,25 +35,25 @@ public final class Engine {
     }
 
     public interface Converter {
-        Object up(Object value);
-        default Object down(Object value) {
+        Object up(@Nullable Object value);
+        default Object down(@Nullable Object value) {
             return value;
         }
     }
 
     public record Change(String version, String id, String description, List<Map<String, Object>> ops) {}
 
-    public record VersionInfo(String date, boolean deprecated, String sunset) {}
+    public record VersionInfo(String date, boolean deprecated, @Nullable String sunset) {}
 
-    public record Bundle(String head, List<String> dates, String oldest, String policy, List<Change> changes, Map<String, SchemaDef> registry, Map<String, Converter> converters, Limits limits, PinStore pins, String oversize, List<VersionInfo> versionInfo) {}
+    public record Bundle(String head, List<String> dates, String oldest, String policy, List<Change> changes, Map<String, SchemaDef> registry, Map<String, Converter> converters, Limits limits, @Nullable PinStore pins, String oversize, List<VersionInfo> versionInfo) {}
 
     public record Step(String version, String id, Map<String, Object> op) {}
 
-    public record Result(Object body, String path, List<String[]> query, List<String[]> headers, Integer status, String legacyHandler, String trace, boolean parsed) {}
+    public record Result(Object body, @Nullable String path, @Nullable List<String[]> query, @Nullable List<String[]> headers, @Nullable Integer status, @Nullable String legacyHandler, @Nullable String trace, boolean parsed) {}
 
     private Engine() {}
 
-    public static Bundle load(Path dir, String today, Map<String, SchemaDef> registry, Map<String, Converter> converters, Limits limits, PinStore pins, String oversize) {
+    public static Bundle load(Path dir, @Nullable String today, @Nullable Map<String, SchemaDef> registry, @Nullable Map<String, Converter> converters, @Nullable Limits limits, @Nullable PinStore pins, @Nullable String oversize) {
         try {
             Object versions = YamlDocs.parse(Files.readString(dir.resolve("versions.yaml")));
             List<Object> changes = new ArrayList<>();
@@ -78,7 +79,7 @@ public final class Engine {
     }
 
     @SuppressWarnings("unchecked")
-    public static Bundle build(Object versionsDoc, List<Object> changeDocs, String today, Map<String, SchemaDef> registry, Map<String, Converter> converters, Limits limits, PinStore pins, String oversize) {
+    public static Bundle build(Object versionsDoc, List<Object> changeDocs, @Nullable String today, @Nullable Map<String, SchemaDef> registry, @Nullable Map<String, Converter> converters, @Nullable Limits limits, @Nullable PinStore pins, @Nullable String oversize) {
         String clock = today == null ? LocalDate.now(ZoneOffset.UTC).toString() : today;
         assertPaths(changeDocs);
         SchemaCheck.validate(versionsDoc);
@@ -367,7 +368,7 @@ public final class Engine {
         return introduced ? new ClientField("_head", headPath) : new ClientField(path, null);
     }
 
-    public record ClientField(String field, String headPath) {}
+    public record ClientField(String field, @Nullable String headPath) {}
 
     private static String replacePath(String actual, String to, String from) {
         java.util.List<Seg> actualSegs = splitPath(actual);
@@ -424,7 +425,7 @@ public final class Engine {
         }
     }
 
-    public static String resolve(Bundle bundle, Map<String, List<String>> headers, String headerName, String resolved, String clientId) {
+    public static String resolve(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId) {
         List<String> values = readHeader(headers, headerName == null ? "Api-Version" : headerName);
         List<String> distinct = values.stream().distinct().toList();
         if (distinct.size() > 1) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
@@ -433,7 +434,7 @@ public final class Engine {
         return applyDefault(bundle, clientId);
     }
 
-    public record Request(String schema, String version, Object body, String method, String path, List<String[]> query, List<String[]> headers, Integer status, boolean isError, String errorCode, boolean trace) {}
+    public record Request(@Nullable String schema, String version, @Nullable Object body, @Nullable String method, @Nullable String path, @Nullable List<String[]> query, @Nullable List<String[]> headers, @Nullable Integer status, boolean isError, @Nullable String errorCode, boolean trace) {}
 
     private static Result finish(Request request, String direction, List<Step> steps, Object body, String path, List<String[]> query, List<String[]> headers, Integer status, String legacy, boolean parsed) {
         String trace = null;
