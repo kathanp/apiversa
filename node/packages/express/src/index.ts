@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { ApiversaError, type Apiversa } from 'apiversa';
+import { ApiversaError, convertForm, type Apiversa } from 'apiversa';
 
 export type RouteDecl = { body?: string; response?: string };
 
@@ -42,16 +42,22 @@ export function route(av: Apiversa, decl: RouteDecl): RequestHandler {
       version = av.resolveVersion({ headers: request.headers, request });
       const emptyUp = !decl.body || av.planIsEmpty(version, decl.body, 'up');
       const emptyDown = !decl.response || av.planIsEmpty(version, decl.response, 'down');
+      const type = contentType(request.headers);
+      const raw = decl.body && !emptyUp && isForm(type) ? rawText(request.body) : undefined;
+      if (raw !== undefined && decl.body) {
+        const converted = convertForm(av, raw, type, decl.body, version, 'up');
+        request.body = type.includes('multipart/form-data') ? converted.body : converted.fields;
+      }
       const prepared = av.prepare('up', {
         schema: decl.body,
-        body: decl.body && !emptyUp ? request.body : undefined,
+        body: raw === undefined && decl.body && !emptyUp ? request.body : undefined,
         version,
         method: request.method,
         path: request.path,
         query: request.originalUrl?.includes('?') ? request.originalUrl.slice(request.originalUrl.indexOf('?') + 1) : undefined,
       });
       if (prepared.legacyHandler) request.apiversaLegacy = prepared.legacyHandler;
-      if (decl.body && !emptyUp && request.body !== undefined) request.body = prepared.body;
+      if (raw === undefined && decl.body && !emptyUp && request.body !== undefined) request.body = prepared.body;
       if (decl.response && !emptyDown) wrap(av, response, version, decl.response, request);
       next();
     } catch (error) {
@@ -87,6 +93,21 @@ function wrap(av: Apiversa, res: VersionedResponse, version: string, schema: str
     }
     writeJson(body);
   };
+}
+
+function contentType(headers: Record<string, string | string[] | undefined>): string {
+  const value = headers['content-type'];
+  return typeof value === 'string' ? value : '';
+}
+
+function isForm(type: string): boolean {
+  return type.includes('application/x-www-form-urlencoded') || type.includes('multipart/form-data');
+}
+
+function rawText(body: unknown): string | undefined {
+  if (typeof body === 'string') return body;
+  if (Buffer.isBuffer(body)) return body.toString('utf8');
+  return undefined;
 }
 
 function sendError(res: VersionedResponse, error: unknown): void {

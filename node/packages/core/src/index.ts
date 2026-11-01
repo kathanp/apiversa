@@ -12,3 +12,5 @@ export { generate, schemaFieldsAt, writeGenerated, type HeadField } from './cli/
 export { openApiVersions, versionPicker, writeOpenApi, type OpenApiDocument, type VersionPicker } from './cli/openapi.js';
 export { changelogBundle, writeChangelog, type ChangelogDocument } from './cli/changelog.js';
 export { toMatchVersion } from './testing.js';
+export { downgradeNdjson, downgradeNdjsonLine, downgradeSse, downgradeSseLine } from './stream.js';
+export { convertForm, type FormResult } from './form.js';
