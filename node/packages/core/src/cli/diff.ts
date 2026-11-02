@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { loadBundle, type Bundle } from '../bundle/load.js';
 import { ApiversaError } from '../errors.js';
 import { encodeJson } from '../json/encode.js';
