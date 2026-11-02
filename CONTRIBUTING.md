@@ -55,3 +55,7 @@ Create `conformance/fixtures/core/<name>/case.json`. Point it at a change file u
 - Features not on the roadmap without an issue showing a real need.
 - Changes that lower a coverage, mutation, or performance gate.
 - New runtime dependencies in `apiversa` core or `apiversa-core-java`.
+
+## Status
+
+Nothing is published. The packages are not on npm or Maven. `docs/VERSION-HISTORY.md` is where a release is recorded after one ships.

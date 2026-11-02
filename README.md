@@ -1,8 +1,21 @@
 # apiversa
 
-**Change your API without breaking old clients.** Stripe-style, date-based API versioning for Node.js and Spring.
+apiversa is date-based API versioning for Node.js and Spring. You write the newest handler once, and a change file keeps older clients working.
 
-> Status: **pre-release. Not yet published.** Nothing below is available on npm or Maven yet. See `docs/VERSION-HISTORY.md` for what has shipped.
+It is for teams that ship breaking API changes and still have old apps and partner integrations in the field.
+
+```ts
+import express from 'express';
+import { createApiversa } from 'apiversa';
+import { apiversa, route } from '@apiversa/express';
+
+const av = createApiversa({ dir: './api-versions', schemas: { Hotel } });
+const app = express();
+app.use(express.json());
+app.use(apiversa(av));
+app.get('/hotels/:id', route(av, { response: 'Hotel' }), (req, res) => res.json(getHotel(req.params.id)));
+app.listen(3000);
+```
 
 ## The problem
 
@@ -15,24 +28,7 @@ You rename a field, or a number becomes an object. Every mobile app version stil
 - Each breaking change is one small change file.
 - apiversa upgrades old requests to the newest shape, runs your handler once, and downgrades the response back to the client's version.
 
-## Quickstart (Express, planned for node 0.1.0)
-
-```bash
-npm install apiversa @apiversa/express @apiversa/zod
-npx apiversa init
-```
-
-```ts
-import express from 'express';
-import { createApiversa } from 'apiversa';
-import { apiversa } from '@apiversa/express';
-import { Hotel } from './schemas';
-
-const av = createApiversa({ dir: './api-versions', schemas: { Hotel } });
-const app = express();
-app.use(apiversa(av));
-app.get('/hotels/:id', av.route({ response: 'Hotel' }), (req, res) => res.json(getHotel(req.params.id)));
-```
+## A change file
 
 ```yaml
 # api-versions/2026-03-01.price-object.yaml
@@ -61,7 +57,7 @@ A client sending `Api-Version: 2026-01-15` still gets `"price": 89`. A client on
 
 ## Planned for Spring
 
-The same change files work in Spring Boot through `apiversa-spring-boot-starter`. Spring 0.1.0 is built alongside node 0.1.0. Both libraries must give byte-identical output for the same change files.
+The same change files work in Spring Boot through `apiversa-spring-boot-starter`. Both libraries give the same output for the same change files.
 
 ## Docs
 
