@@ -31,4 +31,18 @@ describe('form bodies', () => {
     expect(convertForm(engine, multipart, 'multipart/form-data', 'Hotel', '2026-01-15', 'up').body).toBe(multipart);
     expect(() => convertForm(engine, 'city=Paris&city=Lyon', 'application/x-www-form-urlencoded', 'Hotel', '2026-01-15', 'up')).toThrow(expect.objectContaining({ code: 'AV-E015' }));
   });
+
+  it('rejects a repeated multipart name and appends an added field', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'apiversa-form-add-'));
+    writeFileSync(join(dir, 'versions.yaml'), 'head: "2026-03-01"\nversions:\n  - date: "2026-03-01"\n  - date: "2026-01-15"\ndefault: oldest\n');
+    writeFileSync(join(dir, '2026-03-01.add.yaml'), 'version: "2026-03-01"\nid: add-count\ndescription: "Hotel.guestCount was added."\nchanges:\n  - op: field.add\n    schema: Hotel\n    path: guestCount\n    default: 1\n');
+    const engine = createApiversa({ dir, schemas: { Hotel: {} }, development: false, trace: false });
+    const duplicate = '--b\r\nContent-Disposition: form-data; name="city"\r\n\r\nParis\r\n--b\r\nContent-Disposition: form-data; name="city"\r\n\r\nLyon\r\n--b--\r\n';
+    expect(() => convertForm(engine, duplicate, 'multipart/form-data; boundary=b', 'Hotel', '2026-01-15', 'up')).toThrow(expect.objectContaining({ code: 'AV-E015' }));
+    const body = '--b\r\nContent-Disposition: form-data; name=note\r\n\r\nhi\r\n--b\r\nloose\r\n--b--\r\n';
+    const converted = convertForm(engine, body, 'multipart/form-data; boundary="b"', 'Hotel', '2026-01-15', 'up');
+    expect(converted.fields.guestCount).toBe('1');
+    expect(converted.body).toContain('name="guestCount"');
+    expect(converted.body).toContain('loose');
+  });
 });

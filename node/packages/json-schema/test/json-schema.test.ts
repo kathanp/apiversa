@@ -25,4 +25,24 @@ describe('JSON Schema and TypeBox registries', () => {
     const av = createApiversa({ dir, schemas: fromJson, development: false, trace: false, now: '2026-10-31' });
     expect(av.convertRequest({ schema: 'Hotel', body: { city: 'Paris', stars: 4 }, version: '2026-01-15' })).toEqual({ locality: 'Paris', stars: 4 });
   });
+
+  it('follows a property $ref and an items $ref', () => {
+    const registry = defineJsonSchemas({
+      Address: { type: 'object', properties: { city: { type: 'string' } } },
+      Room: { type: 'object', properties: { number: { type: 'string' } } },
+      Hotel: {
+        type: 'object',
+        properties: {
+          address: { $ref: '#/components/schemas/Address' },
+          rooms: { type: 'array', items: { $ref: 'Room' } },
+          note: { type: 'string' },
+        },
+      },
+    });
+    expect(registry.Hotel?.fields).toEqual([
+      { name: 'address', schema: 'Address' },
+      { name: 'rooms', items: 'Room' },
+      { name: 'note' },
+    ]);
+  });
 });

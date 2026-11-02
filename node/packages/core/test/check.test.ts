@@ -48,6 +48,26 @@ describe('breaking-change check', () => {
     expect(() => loadBundle(dir, { today: '2026-10-31', registry: { Hotel: {} } })).toThrow(expect.objectContaining({ code: 'AV-E013' }));
     expect(runCli(['node', 'apiversa', 'check', dir, '--suggest'])).toBe(1);
   });
+
+  it('reports a missing head, a type change, and a removed field', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'apiversa-check-empty-'));
+    expect(checkBundle(empty).summary).toBe('api-versions/head.json is missing.');
+    const dir = mkdtempSync(join(tmpdir(), 'apiversa-check-type-'));
+    writeFileSync(join(dir, 'versions.yaml'), VERSIONS);
+    writeFileSync(join(dir, 'head.json'), JSON.stringify({ Hotel: [{ name: 'stars', type: 'number' }, { name: 'code' }] }));
+    expect(checkBundle(dir).summary).toBe('No version changes.');
+    mkdirSync(join(dir, 'snapshots'));
+    expect(checkBundle(dir).ok).toBe(true);
+    writeFileSync(join(dir, 'snapshots/2026-01-15.json'), JSON.stringify({ Hotel: [{ name: 'stars', type: 'string' }, { name: 'old', type: 'string' }, { name: 'legacy', type: 'string' }] }));
+    writeFileSync(join(dir, 'routes.json'), JSON.stringify({ not: 'a list' }));
+    writeFileSync(join(dir, '2026-03-01.note.yaml'), 'version: "2026-01-15"\nid: note\ndescription: "Older note."\nchanges:\n  - op: endpoint.deprecate\n    method: POST\n    path: /hotels\n');
+    const result = checkBundle(dir, { format: 'text', suggest: true });
+    expect(result.ok).toBe(false);
+    expect(result.diffs.map((diff) => diff.kind).sort()).toEqual(['added', 'removed', 'removed', 'type']);
+    expect(result.summary).toContain('POST /hotels');
+    expect(result.suggested).toContain('suggested.yaml');
+    expect(checkBundle(dir, { suggest: true }).suggested).toContain('suggested.yaml');
+  });
 });
 
 function bundle(withChange: boolean): string {
