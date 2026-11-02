@@ -781,9 +781,7 @@ app.post('/bookings', av.route({ body: 'BookingInput', response: 'Booking' }), c
 
 ## D4. CLI
 
-`apiversa init | check | generate | test | changelog | upgrade-guide | explain | lock | retire | eject | diff | matrix`
-
-`diff` arrives with DBG-05. `matrix` arrives with DOC-07.
+`apiversa init | lock | doctor | generate | check | test | openapi | changelog | eject | explain | retire | replay | diff | matrix | upgrade-guide`
 
 ---
 
