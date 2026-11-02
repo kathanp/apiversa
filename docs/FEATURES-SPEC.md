@@ -11,7 +11,12 @@
 | License         | Apache-2.0                                                                                         |
 | Author          | Kathan Patel                                                                                       |
 
-**Status.** Unpublished. 0 users. node 0.22.0 and spring 0.16.0 are in progress. FW-03, SPR-03, SPR-14, and Spring CORE-10 pass their tests. CORE-14 and SPR-11 are still open. Not human-reviewed.
+**Status.** `[x]` means implemented and tested. Nothing is published yet.
+
+| Track | Last version fully [x] | Open IDs | Published |
+| --- | --- | --- | --- |
+| node | 0.22.0 | none | no |
+| spring | 0.15.0 | CORE-14 and SPR-11 on spring 0.16.0 | no |
 
 **How to read this file.** Part A says what the product is. Part B is the shared change-file contract both libraries implement: format, expressions, schema graph, chain order, canonical JSON, and failure behavior. Part C is every feature, with an ID, acceptance criteria, and what it refuses. Part D is the Node library. Part E is the Spring library. Part F is quality budgets and error codes. Part G is what is left out on purpose. **Part H, at the bottom, is the roadmap: which feature ships in which version.** `docs/VERSION-HISTORY.md` records what actually shipped. Where Part C, D, or E disagrees with Part B on order, encoding, absence, or errors, Part B wins.
 
