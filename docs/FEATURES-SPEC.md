@@ -1130,7 +1130,7 @@ Theme: messages.
 - **EVT-03** [x] Message queues — Evidence: adoption
 
 ### spring 0.7.0
-Theme: forms and fuzzing.
+Theme: fuzzing.
 - **TEST-08** [x] Fuzz suite — Evidence: safety
 
 ### spring 0.8.0
