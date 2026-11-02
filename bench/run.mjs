@@ -40,7 +40,8 @@ for (let index = 0; index < 50; index += 1) {
   one.push((performance.now() - mark) * 1000);
 }
 const result = {
-  date: '2026-10-31',
+  date: '2026-11-01',
+  node: process.version,
   machine: `${process.platform} ${process.arch}`,
   cases: {
     'Head-version request overhead': { p50Us: p50(head) },
@@ -50,6 +51,6 @@ const result = {
 };
 const outDir = new URL('./results/', import.meta.url);
 mkdirSync(outDir, { recursive: true });
-const file = new URL('./results/2026-10-31.json', import.meta.url);
+const file = new URL('./results/2026-11-01.json', import.meta.url);
 writeFileSync(file, `${JSON.stringify(result, null, 2)}\n`);
 process.stdout.write(`wrote ${file.pathname}\n${JSON.stringify(result.cases)}\n`);

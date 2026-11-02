@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-01",
+  "node": "v22.23.3",
+  "machine": "darwin arm64",
+  "cases": {
+    "Head-version request overhead": {
+      "p50Us": 1.4579999999995152
+    },
+    "One change, 10 KB JSON downgrade": {
+      "p50Us": 68.16700000000253
+    },
+    "Startup with 50 change files": {
+      "p50Ms": 14.945041000000003
+    }
+  }
+}
