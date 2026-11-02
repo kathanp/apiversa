@@ -729,14 +729,22 @@ LIFE-02's snapshot gains `unpinned`, a count per version of requests whose date 
 
 ## D1. Packages
 
-| Package                  | Contents                                  |
-| ------------------------ | ----------------------------------------- |
-| `apiversa`               | Core engine, YAML loader, CLI             |
-| `@apiversa/express` … `@apiversa/koa` | Framework adapters (FW-01…06) |
-| `@apiversa/zod`          | Zod schema registry and generator         |
-| `@apiversa/pin-redis`, `@apiversa/pin-postgres` | Pin stores |
-| `@apiversa/otel`, `@apiversa/prometheus` | Counter exporters          |
-| `@apiversa/client`, `@apiversa/react` | Client side                  |
+| Package | Contents |
+| --- | --- |
+| `apiversa` | Core engine, YAML loader, CLI |
+| `@apiversa/express` | Express adapter |
+| `@apiversa/fastify` | Fastify adapter |
+| `@apiversa/nest` | NestJS adapter |
+| `@apiversa/hono` | Hono adapter |
+| `@apiversa/next` | Next.js adapter |
+| `@apiversa/koa` | Koa adapter |
+| `@apiversa/zod` | Zod schema registry and generator |
+| `@apiversa/json-schema` | JSON Schema registry. TypeBox schemas enter through `defineTypeBoxSchemas` (TYPE-05) |
+| `@apiversa/pin-redis` | Redis pin store |
+| `@apiversa/pin-postgres` | Postgres pin store |
+| `@apiversa/otel` | OpenTelemetry spans |
+| `@apiversa/client` | Client side |
+| `@apiversa/react` | React client |
 
 Core has zero runtime dependencies. The YAML parser is a small, vendored, safe subset (no anchors, no tags, no custom types) inside core.
 
@@ -783,14 +791,19 @@ app.post('/bookings', av.route({ body: 'BookingInput', response: 'Booking' }), c
 
 ## E1. Modules
 
-| Module                            | Contents                                   |
-| --------------------------------- | ------------------------------------------ |
-| `apiversa-core-java`              | YAML loader, ops, chains (no Spring)       |
-| `apiversa-spring-boot-starter`    | Auto-configuration, MVC advice, resolver   |
-| `apiversa-springdoc`              | OpenAPI groups per version                 |
-| `apiversa-spring-kafka`           | Message conversion                         |
-| `apiversa-micrometer`             | Counters                                   |
-| `apiversa-test`                   | JUnit 5 and MockMvc helpers                |
+| Module | Contents |
+| --- | --- |
+| `apiversa-core-java` | YAML loader, ops, chains (no Spring) |
+| `apiversa-spring-boot-starter` | Auto-configuration, MVC advice, resolver |
+| `apiversa-spring-framework7` | Framework 7 `ApiVersionResolver` |
+| `apiversa-webflux` | WebFlux |
+| `apiversa-springdoc` | OpenAPI groups per version |
+| `apiversa-kafka` | Message conversion |
+| `apiversa-micrometer` | Counters |
+| `apiversa-actuator` | Actuator endpoint |
+| `apiversa-kotlin` | Kotlin extensions |
+| `apiversa-maven-plugin` | Maven goals |
+| `apiversa-test` | JUnit 5 and MockMvc helpers |
 
 ## E2. Configuration
 
