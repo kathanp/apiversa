@@ -925,7 +925,7 @@ Theme: usable core on Express and Fastify.
 - **CORE-05** [x] Declarative operations — Evidence: cadwyn
 - **CORE-06** [x] Paths — Evidence: cadwyn
 - **CORE-07** [x] Schema binding — Evidence: cadwyn
-- **CORE-09** [x] Version errors — Evidence: stripe
+- **CORE-09** [x] Error envelope — Evidence: stripe
 - **CORE-12** [x] Limits — Evidence: safety
 - **TYPE-01** [x] Head schemas (Zod) — Evidence: cadwyn
 - **FW-01** [x] Express adapter — Evidence: adoption
@@ -1090,7 +1090,7 @@ Theme: usable core on Spring MVC, with docs and the CI gate. Same behavior as no
 - **CORE-06** [x] Paths — Evidence: cadwyn
 - **CORE-07** [x] Schema binding — Evidence: cadwyn
 - **CORE-08** [x] Error bodies — Evidence: stripe
-- **CORE-09** [x] Version errors — Evidence: stripe
+- **CORE-09** [x] Error envelope — Evidence: stripe
 - **CORE-12** [x] Limits — Evidence: safety
 - **CORE-13** [x] Query parameters — Evidence: stripe
 - **ADOPT-02** [x] Per-route opt-in — Evidence: adoption
