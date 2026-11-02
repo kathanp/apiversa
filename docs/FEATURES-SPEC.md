@@ -204,7 +204,7 @@ A change names a **schema** (`Hotel`), not a route. The registry is a graph of n
 - A JSON object the graph does not name is still addressable by a path (B5). Ops for a named schema do not run on it.
 - Cycles in the graph are allowed (`Hotel.parent` is a `Hotel`). JSON values are trees. The walk stops at 32 segments (`AV-E004`).
 - When a schema has no field list (a conformance case that omits `fields`), that object keeps input key order, and a key created by an op is appended.
-- A schema may store one discriminator when CORE-21 has shipped: a path plus a map from string values to schema names. Variant changes run only for the matching name. Until that ID ships, registries have no discriminator field.
+- A schema may store one discriminator: a path plus a map from string values to schema names. Variant changes run only for the matching name.
 - CORE-24 may narrow a field, enum, or object op to listed routes and to `request` or `response`. With no `scope`, the op still runs everywhere the schema appears. `scope` does not make the change name a route.
 
 ## B7. Canonical JSON
@@ -254,7 +254,7 @@ A missing key and JSON `null` are different. `null` is a present value.
 
 `field.add` round-trips absent ↔ `default`, and round-trips `null`. It does not round-trip a client that sent a value whose canonical bytes equal `default`: `down` removes that key. `field.remove` restores `default`, not the client's original value.
 
-`header.add` and `header.remove` follow that same absent and present table once CORE-18 has shipped. A missing header is "absent." Headers have no JSON `null`. An empty header value is present and is not replaced by `default`. Comparison is the trimmed value. The name written is the spelling in the change file.
+`header.add` and `header.remove` follow that same absent and present table. A missing header is "absent." Headers have no JSON `null`. An empty header value is present and is not replaced by `default`. Comparison is the trimmed value. The name written is the spelling in the change file.
 
 `link.rewrite` (CORE-19) rewrites a string that matches the route pattern and leaves every other JSON value, including `null` and an absent key, unchanged. `field.deprecate` (CORE-20) does not change the body.
 
@@ -586,7 +586,7 @@ Interface `{ get(clientId), set(clientId, date) }`. Memory (core) and Redis (`@a
 `@apiversa/pin-postgres`, using the host's `pg` pool (peer dependency). One table, created by a migration the host runs.
 
 #### LIFE-08 — Sunset enforcement
-A version entry may set `sunsetEnforce: true` beside `sunset`. The default is false, which keeps LIFE-01: the `Sunset` header is sent and the handler runs. `schema/change-file.schema.json` accepts `sunsetEnforce` when this ID ships. Until then the key is invalid (`AV-E001`).
+A version entry may set `sunsetEnforce: true` beside `sunset`. The default is false, which keeps LIFE-01: the `Sunset` header is sent and the handler runs. `schema/change-file.schema.json` accepts `sunsetEnforce`.
 When `sunsetEnforce` is true and `sunset` is strictly before the UTC date, a request for that version returns `410` with `AV-E012` and the Sunset link from CORE-02. The date stays in `supportedVersions`. A sunset of today or later does not reject. The engine option `now` is a `YYYY-MM-DD` string. Tests set it. When it is omitted, the engine uses the UTC calendar date at the start of that request.
 - Done when: `sunsetEnforce: true` and a past sunset return `AV-E012`; the same sunset without the flag runs the handler and still sets `Sunset`; `sunsetEnforce: true` and a future sunset run the handler; a test passes `now` and does not read the clock.
 - Refuses: rejecting a version that has `sunset` and does not have `sunsetEnforce: true`.
