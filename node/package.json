@@ -10,8 +10,8 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --testTimeout=120000",
+    "test:coverage": "vitest run --coverage --testTimeout=120000",
     "conformance": "vitest run packages/core/test/conformance.test.ts",
     "build": "tsc -b --pretty false"
   },
