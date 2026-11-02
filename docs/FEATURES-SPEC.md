@@ -1112,12 +1112,14 @@ Theme: correct errors and webhooks.
 - **SPR-10** [x] Bean Validation errors — Evidence: safety
 - **EVT-01** [x] Downgrade an outgoing event — Evidence: stripe
 - **EVT-02** [x] Subscriber pins — Evidence: stripe
+  Depends on SPR-15 (spring 0.17.0).
 
 ### spring 0.4.0
 Theme: lifecycle.
 - **LIFE-01** [x] Deprecation and Sunset headers — Evidence: rfc
 - **LIFE-03** [x] Safe-to-remove report — Evidence: adoption
 - **LIFE-06** [x] Pin upgrade with preview — Evidence: stripe
+  Depends on SPR-15 (spring 0.17.0).
 
 ### spring 0.5.0
 Theme: reactive.
