@@ -2,6 +2,7 @@ package io.github.kathanp.apiversa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -26,7 +27,8 @@ class FormBodiesTest {
         assertTrue(converted.body().contains("filename=\"a.txt\""));
         assertEquals("city=Paris", FormBodies.convert(bundle, "city=Paris", "text/plain", "Hotel", "2026-01-15", "up").body());
         assertEquals(multipart, FormBodies.convert(bundle, multipart, "multipart/form-data", "Hotel", "2026-01-15", "up").body());
-        assertEquals("Lyon", FormBodies.convert(bundle, "city=Paris&city=Lyon", "application/x-www-form-urlencoded", "Hotel", "2026-01-15", "up").fields().get("locality"));
+        ApiversaException duplicate = assertThrows(ApiversaException.class, () -> FormBodies.convert(bundle, "city=Paris&city=Lyon", "application/x-www-form-urlencoded", "Hotel", "2026-01-15", "up"));
+        assertEquals("AV-E015", duplicate.code());
         assertNull(FormBodies.convert(bundle, null, null, "Hotel", "2026-01-15", "up").body());
     }
 

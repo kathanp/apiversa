@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildBundle, type Bundle } from '../src/bundle/load.js';
 import { execute } from '../src/chain/run.js';
+import { createApiversa } from '../src/create.js';
+import { convertForm } from '../src/form.js';
 import { ApiversaError, type Direction } from '../src/errors.js';
 import { encodeJson } from '../src/json/encode.js';
 import { fromPlain, type Registry } from '../src/json/parse.js';
@@ -30,6 +32,7 @@ describe('conformance fixtures', () => {
         error?: string;
         fields?: string[];
         schemas?: Record<string, string[]>;
+        form?: { contentType: string; body: string };
         request?: { method?: string; path?: string; query?: [string, string][]; headers?: [string, string][]; body?: unknown; status?: number };
         response?: { status?: number; headers?: [string, string][]; body?: unknown };
       };
@@ -39,6 +42,17 @@ describe('conformance fixtures', () => {
         registry[schema] = { fields: fields.map((field) => ({ name: field })) };
       }
       const bundle = buildBundle(versions, changes, { today: '2026-10-30', registry });
+      if (spec.form) {
+        const av = createApiversa({ dir, schemas: registry, development: false, trace: false, now: '2026-10-30' });
+        try {
+          convertForm(av, spec.form.body, spec.form.contentType, spec.schema, spec.version, spec.direction);
+          expect(spec.error, name).toBeUndefined();
+        } catch (error) {
+          expect(error).toBeInstanceOf(ApiversaError);
+          expect((error as ApiversaError).code, name).toBe(spec.error);
+        }
+        return;
+      }
       if (spec.request) {
         checkRequest(name, bundle, spec);
         return;

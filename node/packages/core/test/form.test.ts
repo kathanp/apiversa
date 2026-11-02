@@ -29,6 +29,6 @@ describe('form bodies', () => {
     expect(converted.body).toContain('filename="a.txt"');
     expect(convertForm(engine, 'city=Paris', 'text/plain', 'Hotel', '2026-01-15', 'up')).toEqual({ fields: {}, body: 'city=Paris' });
     expect(convertForm(engine, multipart, 'multipart/form-data', 'Hotel', '2026-01-15', 'up').body).toBe(multipart);
-    expect(convertForm(engine, 'city=Paris&city=Lyon', 'application/x-www-form-urlencoded', 'Hotel', '2026-01-15', 'up').fields).toEqual({ locality: 'Lyon' });
+    expect(() => convertForm(engine, 'city=Paris&city=Lyon', 'application/x-www-form-urlencoded', 'Hotel', '2026-01-15', 'up')).toThrow(expect.objectContaining({ code: 'AV-E015' }));
   });
 });

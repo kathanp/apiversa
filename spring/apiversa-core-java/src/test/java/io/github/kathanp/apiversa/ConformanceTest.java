@@ -40,6 +40,15 @@ class ConformanceTest {
                     for (Map.Entry<?, ?> entry : nested.entrySet()) registry.put(String.valueOf(entry.getKey()), fields(entry.getValue()));
                 }
                 Engine.Bundle bundle = Engine.build(versions, changes, "2026-10-30", registry, Map.of(), null, null, null);
+                if (spec.get("form") instanceof Map<?, ?> form) {
+                    try {
+                        FormBodies.convert(bundle, String.valueOf(form.get("body")), String.valueOf(form.get("contentType")), schema, String.valueOf(spec.get("version")), String.valueOf(spec.get("direction")));
+                        if (spec.get("error") != null) throw new AssertionError(dir.getFileName() + " expected " + spec.get("error"));
+                    } catch (ApiversaException exception) {
+                        assertEquals(spec.get("error"), exception.code(), dir.getFileName().toString());
+                    }
+                    continue;
+                }
                 if (spec.get("request") instanceof Map<?, ?> request) {
                     checkRequest(dir.getFileName().toString(), bundle, schema, spec, request);
                     continue;

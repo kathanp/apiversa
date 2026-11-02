@@ -16,7 +16,7 @@
 | Track | Last version fully [x] | Open IDs | Published |
 | --- | --- | --- | --- |
 | node | 0.22.0 | none | no |
-| spring | 0.15.0 | CORE-14 and SPR-11 on spring 0.16.0 | no |
+| spring | 0.15.0 | SPR-11 on spring 0.16.0 | no |
 
 **How to read this file.** Part A says what the product is. Part B is the shared change-file contract both libraries implement: format, expressions, schema graph, chain order, canonical JSON, and failure behavior. Part C is every feature, with an ID, acceptance criteria, and what it refuses. Part D is the Node library. Part E is the Spring library. Part F is quality budgets and error codes. Part G is what is left out on purpose. **Part H, at the bottom, is the roadmap: which feature ships in which version.** `docs/VERSION-HISTORY.md` records what actually shipped. Where Part C, D, or E disagrees with Part B on order, encoding, absence, or errors, Part B wins.
 
@@ -354,7 +354,7 @@ The `query.rename`, `query.add`, and `query.remove` ops (B4) upgrade old query p
 `application/x-www-form-urlencoded` and the text fields of `multipart/form-data` convert with the same field ops as JSON. File parts pass through untouched. A repeated form key is `AV-E015` (B10).
 - Done when: a renamed form field upgrades; a file part is byte-identical after conversion; a repeated form key returns `AV-E015`.
 - Refuses: buffering file parts in memory to convert them, and keeping the last repeated form key.
-- Node does this on node 0.7.0. Spring MVC now runs form bodies through `FormBodies` before the form converter (spring 0.16.0). A repeated form key still keeps the last value, because `FormBodiesTest` locks that behavior. The ID stays unchecked until that test and B10 agree (D-41).
+- Node does this on node 0.7.0. Spring MVC runs form bodies through `FormBodies` before the form converter (spring 0.16.0). A repeated form key is `AV-E015` (D-55).
 
 #### CORE-15 — Validation errors in the client's terms
 When the head schema rejects an upgraded request, the error paths are translated back to the client's version using the reverse of the rename and move ops. A client on an old version that sent `town` sees an error about `town`, not `city`.
@@ -1184,7 +1184,7 @@ Theme: finish the deferred Spring Done-when items (D-39).
 - **SPR-03** [x] Version resolution — Evidence: spring7-gap
 - **SPR-14** [x] Maven plugin — Evidence: adoption
 - **CORE-10** [x] Released versions are frozen — Evidence: safety
-- **CORE-14** Form bodies — Evidence: adoption
+- **CORE-14** [x] Form bodies — Evidence: adoption
 - **SPR-11** GraalVM native image — Evidence: adoption
 
 ### spring 1.0.0

@@ -1,4 +1,4 @@
-import type { Direction } from './errors.js';
+import { fail, type Direction } from './errors.js';
 import { parseQuery, type Apiversa } from './create.js';
 
 export type FormResult = { fields: Record<string, string>; body: string };
@@ -10,7 +10,7 @@ export type FormResult = { fields: Record<string, string>; body: string };
 export function convertForm(av: Apiversa, body: string, contentType: string, schema: string, version: string, direction: Direction): FormResult {
   if (contentType.includes('multipart/form-data')) return convertMultipart(av, body, contentType, schema, version, direction);
   if (!contentType.includes('application/x-www-form-urlencoded')) return { fields: {}, body };
-  const fields = fold(parseQuery(body));
+  const fields = fold(parseQuery(body), direction);
   const converted = applyFields(av, fields, schema, version, direction);
   return { fields: converted, body: encodeForm(converted) };
 }
@@ -26,6 +26,7 @@ function convertMultipart(av: Apiversa, body: string, contentType: string, schem
     if (isFilePart(chunk)) continue;
     const name = partName(chunk);
     if (!name) continue;
+    if (Object.hasOwn(text, name)) throw fail('AV-E015', direction);
     names.push(name);
     text[name] = partValue(chunk);
   }
@@ -70,9 +71,12 @@ function applyFields(av: Apiversa, fields: Record<string, string>, schema: strin
   return out;
 }
 
-function fold(pairs: { name: string; value: string }[]): Record<string, string> {
+function fold(pairs: { name: string; value: string }[], when: Direction): Record<string, string> {
   const fields: Record<string, string> = {};
-  for (const pair of pairs) fields[pair.name] = pair.value;
+  for (const pair of pairs) {
+    if (Object.hasOwn(fields, pair.name)) throw fail('AV-E015', when);
+    fields[pair.name] = pair.value;
+  }
   return fields;
 }
 

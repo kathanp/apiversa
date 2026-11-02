@@ -1,0 +1,11 @@
+{
+  "schema": "Hotel",
+  "direction": "up",
+  "version": "2026-01-15",
+  "fields": ["locality"],
+  "form": {
+    "contentType": "application/x-www-form-urlencoded",
+    "body": "city=Paris&city=Lyon"
+  },
+  "error": "AV-E015"
+}

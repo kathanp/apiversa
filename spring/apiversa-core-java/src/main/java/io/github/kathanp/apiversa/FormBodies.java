@@ -21,7 +21,7 @@ public final class FormBodies {
     public static Result convert(Engine.Bundle bundle, String body, String contentType, String schema, String version, String direction) {
         if (contentType != null && contentType.contains("multipart/form-data")) return multipart(bundle, body, contentType, schema, version, direction);
         if (contentType == null || !contentType.contains("application/x-www-form-urlencoded")) return new Result(Map.of(), body);
-        Map<String, String> fields = fold(body);
+        Map<String, String> fields = fold(body, direction);
         Map<String, String> converted = apply(bundle, fields, schema, version, direction);
         return new Result(converted, encode(converted));
     }
@@ -37,6 +37,7 @@ public final class FormBodies {
             if (file(chunk)) continue;
             String name = name(chunk);
             if (name == null) continue;
+            if (text.containsKey(name)) throw ApiversaException.fail("AV-E015", direction);
             names.add(name);
             text.put(name, value(chunk));
         }
@@ -80,7 +81,7 @@ public final class FormBodies {
         return out;
     }
 
-    private static Map<String, String> fold(String body) {
+    private static Map<String, String> fold(String body, String direction) {
         Map<String, String> fields = new LinkedHashMap<>();
         if (body == null || body.isEmpty()) return fields;
         for (String part : body.split("&")) {
@@ -88,7 +89,9 @@ public final class FormBodies {
             int eq = part.indexOf('=');
             String rawName = eq == -1 ? part : part.substring(0, eq);
             String rawValue = eq == -1 ? "" : part.substring(eq + 1);
-            fields.put(decode(rawName), decode(rawValue));
+            String name = decode(rawName);
+            if (fields.containsKey(name)) throw ApiversaException.fail("AV-E015", direction);
+            fields.put(name, decode(rawValue));
         }
         return fields;
     }
