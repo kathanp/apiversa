@@ -67,15 +67,15 @@ Not for: internal APIs where the same team ships client and server together. Tho
 
 ## A4. What makes it different
 
-| Capability                                   | apiversa | Cadwyn (Python) | tsadwyn 0.1.0 | Spring 7 built-in | `/v1` folders |
-| -------------------------------------------- | -------- | --------------- | ------------- | ----------------- | ------------- |
-| Write head only, convert old versions        | yes      | yes             | partial       | no (routes only)  | no            |
-| Same change files in Node **and** Java       | yes      | no              | no            | no                | no            |
-| Compile-time type check of each version      | yes      | no              | no            | no                | no            |
-| CI gate: head changed without change file    | yes      | no              | no            | no                | no            |
-| Versioned webhooks                           | yes      | partial         | no            | no                | manual        |
-| Usage per version and "safe to delete" report| yes      | no              | no            | no                | no            |
-| Express, Fastify, NestJS, Hono, Next.js      | yes      | FastAPI only    | Express only  | Spring only       | any           |
+| Capability | apiversa | Cadwyn (Python) | tsadwyn 0.1.0 | Spring 7 built-in | `/v1` folders |
+| --- | --- | --- | --- | --- | --- |
+| Write head only, convert old versions | yes | yes | yes | no (routes only) | no |
+| Same change files in Node and Java | yes | no | no | no | no |
+| Compile-time type check of each version | yes | unverified | unverified | unverified | unverified |
+| CI gate: head changed without change file | yes | unverified | unverified | unverified | unverified |
+| Versioned webhooks | yes | unverified | unverified | unverified | unverified |
+| Usage per version and "safe to delete" report | yes | unverified | unverified | unverified | unverified |
+| Express, Fastify, NestJS, Hono, Next.js | yes | FastAPI only | Express only | Spring only | any |
 
 Checked 2026-11-01. Sources and the row-by-row re-check are in `docs/COMPARISON.md`. Re-check before quoting.
 
