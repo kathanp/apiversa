@@ -14,7 +14,7 @@ One section per track and version, newest version first. Node and Spring are int
 - CORE-10 Released versions are frozen
 - CORE-14 Form bodies
 - Migration: a `prod` or `production` profile now fails startup with `AV-E006` when `.lock.json` does not match the change files. `mvn apiversa:check` fails when `head.json` differs from the newest `snapshots/*.json` and no non-draft change file covers that diff. Framework 7 apps depend on `apiversa-spring-framework7`, which delegates `ApiVersionResolver` to `Engine.resolve`. Boot 3.3 keeps its own resolver. A repeated form key is `AV-E015`.
-- Known gap: the native image was not built, so SPR-11 stays unchecked.
+- Known gap: the native image was not built, so SPR-11 moves to spring 0.17.0 and stays unchecked (D-56).
 
 ## node 0.21.0 (unreleased)
 

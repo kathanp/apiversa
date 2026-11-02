@@ -16,7 +16,7 @@
 | Track | Last version fully [x] | Open IDs | Published |
 | --- | --- | --- | --- |
 | node | 0.22.0 | none | no |
-| spring | 0.15.0 | SPR-11 on spring 0.16.0 | no |
+| spring | 0.16.0 | SPR-11 on spring 0.17.0 | no |
 
 **How to read this file.** Part A says what the product is. Part B is the shared change-file contract both libraries implement: format, expressions, schema graph, chain order, canonical JSON, and failure behavior. Part C is every feature, with an ID, acceptance criteria, and what it refuses. Part D is the Node library. Part E is the Spring library. Part F is quality budgets and error codes. Part G is what is left out on purpose. **Part H, at the bottom, is the roadmap: which feature ships in which version.** `docs/VERSION-HISTORY.md` records what actually shipped. Where Part C, D, or E disagrees with Part B on order, encoding, absence, or errors, Part B wins.
 
@@ -672,7 +672,7 @@ CORE-15 for Spring: Jakarta Bean Validation errors on an upgraded request are re
 
 #### SPR-11 — GraalVM native image
 Runtime hints so the starter works in a Spring Boot native image.
-- Done when: the example app builds and passes its tests as a native image in CI. Reflection is registered and the JVM test passed. The image was not built (D-31). The ID stays unchecked on spring 0.16.0 (D-39).
+- Done when: the example app builds and passes its tests as a native image in CI. Reflection is registered and the JVM test passed. The image was not built (D-31). The ID moves to spring 0.17.0 and stays unchecked (D-56).
 
 #### SPR-12 — Kotlin
 Kotlin extension functions and a small DSL for `custom` converters, with null-safety annotations on the Java API.
@@ -1185,6 +1185,9 @@ Theme: finish the deferred Spring Done-when items (D-39).
 - **SPR-14** [x] Maven plugin — Evidence: adoption
 - **CORE-10** [x] Released versions are frozen — Evidence: safety
 - **CORE-14** [x] Form bodies — Evidence: adoption
+
+### spring 0.17.0
+Theme: native image.
 - **SPR-11** GraalVM native image — Evidence: adoption
 
 ### spring 1.0.0
