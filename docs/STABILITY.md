@@ -7,6 +7,11 @@ apiversa sits in every API request of the apps that use it. Its own releases mus
 - A minor release (`0.2.0` → `0.3.0`) may change public APIs. Each change is listed in `CHANGELOG.md` with a migration line.
 - A patch release (`0.2.0` → `0.2.1`) only fixes bugs. No new options, no behavior change beyond the fix.
 - The change-file format (`schema/change-file.schema.json`) only grows. A change file valid in one 0.x release stays valid in every later release.
+- Changing the expected bytes of a conformance case is breaking in 0.x. It needs a minor version and a line in `docs/DECISIONS.md`. A patch must not change those bytes.
+
+## Support window
+
+Before 1.0, only the latest minor of a track receives patches. After 1.0, the current minor and the previous minor receive patches. Older minors do not.
 
 ## From 1.0
 

@@ -1,6 +1,6 @@
 # AUTOPILOT — apiversa full-cycle agent playbook
 
-This file runs the whole cycle with no person in the loop: pick work, write tests, write code, review, gate, commit, push, publish a pre-release, release a stable version weekly, and record it in `docs/VERSION-HISTORY.md`. The coding agent is **Cursor's `cursor-agent`**, started by `scripts/scheduler.mjs` at **9:00 AM and 9:00 PM America/Chicago**.
+This file runs the cycle: pick work, write tests, write code, review, gate, commit, push, publish a pre-release, and record a stable release in `docs/VERSION-HISTORY.md`. No person approves during a run. A person approves every stable release PR. The coding agent is **Cursor's `cursor-agent`**, started by `scripts/scheduler.mjs` at **9:00 AM and 9:00 PM America/Chicago**.
 
 Read order for every run: `AGENTS.md` → this file → `docs/RULES.md` → `docs/FEATURES-SPEC.md` (Part H first) → `docs/ARCHITECTURE.md` → `.autopilot/RUN_STATE.md` (if present).
 
@@ -10,7 +10,7 @@ Read order for every run: `AGENTS.md` → this file → `docs/RULES.md` → `doc
 
 ## 1. Operating rules
 
-1. No person reads or approves anything during a run. Decisions are made by the agent and logged in `docs/DECISIONS.md` as `D-<n> | <date> | <track> | <decision> | <reason>`.
+1. No person approves during a run. A person approves every stable release PR. Decisions during a run are made by the agent and logged in `docs/DECISIONS.md` as `D-<n> | <date> | <track> | <decision> | <reason>`.
 2. Build only roadmap IDs from `docs/FEATURES-SPEC.md` Part H for the version being built. Never invent an ID.
 3. Tests first. Never remove or change a line in an existing test or fixture. Add only.
 4. Never lower a coverage threshold, mutation score, performance budget, or limit to pass a gate.
@@ -98,7 +98,7 @@ A separate agent reads `docs/prompts/REVIEW.md`, the spec section, and the diff.
 1. Full gate (section 9).
 2. Update `CHANGELOG.md` under `## <track> <version> (unreleased)` with one line per finished ID: `- <ID> <title>`.
 3. Update `docs/ARCHITECTURE.md` if a path or the event path changed. Update user docs if behavior is visible to users.
-4. `node scripts/guard.mjs --verify-docs --verify-roadmap`.
+4. `node scripts/guard.mjs --verify-docs --verify-roadmap`. An ID with a deferred Done-when item stays unchecked.
 5. Merge the run branch into `next` with `--no-ff`. Push `next`. CI publishes a pre-release if green.
 
 ## 5. HARDEN run
@@ -123,8 +123,8 @@ For each active track:
 2. If any fails → this run becomes a `BUILD` run.
 3. Pre-publish tarball test (Node): `npm pack` each package, install the `.tgz` files into a new empty folder, run `examples/smoke.mjs`. Spring: `mvn -q install` then run `examples/spring-smoke` against the local artifact. Failure → `BUILD` run, log why.
 4. Rename `## <t> <v> (unreleased)` to `## <t> <v> — <YYYY-MM-DD>` in `CHANGELOG.md`. Set the package or pom version. Commit `release(<t>): <v>`.
-5. Open a PR `next` → `main` with `gh pr create`. Wait for required checks. Merge with a merge commit (`gh pr merge --merge`). If branch protection requires a review, stop with `HS-PROTECTION`. Never bypass it.
-6. Tag `main` with `<t>-v<v>` (for example `node-v0.1.0`) and push the tag. The tag starts the publish workflow.
+5. Open a PR `next` → `main` with `gh pr create`. The PR body includes the diff of every protected file. Wait for required checks and for one human review (D-42). Merge with a merge commit (`gh pr merge --merge`) after that review. Do not merge it yourself.
+6. The owner tags `main` with `<t>-v<v>` (for example `node-v0.1.0`) and pushes the tag. The agent does not create the tag. The tag starts the publish workflow.
 7. Wait for the publish workflow. It runs the stranger check on the published package and writes the result as a workflow artifact `stranger-<t>-<v>.json`.
 8. Download the artifact with `gh run download`. Then run section 7.
 
@@ -179,7 +179,7 @@ On a hard stop: commit work in progress to `wip/<run-id>`, write RUN_STATE, prin
 | `HS-TEST-EDIT`  | Passing would need an existing test or fixture line changed          |
 | `HS-LOOSEN`     | Passing would need a lower threshold, budget, limit or severity      |
 | `HS-MAJOR`      | The target version is a major                                         |
-| `HS-PROTECTION` | Branch protection refuses the merge                                  |
+| `HS-PROTECTION` | Branch protection refuses the merge for a reason other than the one required review |
 | `HS-RELEASE`    | Two failed hotfixes in a row                                         |
 | `HS-CONFLICT`   | Two governing files disagree                                         |
 | `HS-SECRET`     | A secret is found in the tree or a log                               |
@@ -198,4 +198,8 @@ next: <one line>
 
 ## 12. What this setup cannot guarantee
 
-With no person in the loop, the same agent that is told not to edit a gate can edit it. The protection is layered: protected files are compared with the last release tag in CI, the release job refuses any difference, a fresh judge and reviewer check work they did not write, and the publish workflow runs only from a tag on `main`. None of these is proof. If a run ever edits a protected file, treat every release after it as untrusted.
+The same agent that is told not to edit a gate can edit it. The mitigations are: one human review on the `next` → `main` PR (D-42), the protected-file diff shown in that PR body, a signed tag made by the owner, protected files compared with the last release tag in CI, a release job that refuses any difference, and a fresh judge and reviewer that check work they did not write. The publish workflow runs only from a tag on `main`. None of these is proof. If a run ever edits a protected file, treat every release after it as untrusted.
+
+## 13. First release of a track
+
+The first published version of a track is one PR. Its changelog and `docs/VERSION-HISTORY.md` entry list every ID that passes at that commit, from every earlier roadmap section, not only the section named by the version (H0 rule 9, D-40). The owner reviews that PR and creates the signed tag. Later releases list only their own section.

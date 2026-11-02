@@ -18,6 +18,9 @@ Never:
 - edit a file listed under `protected` in `guard.config.json`;
 - edit `schedule.json` (the owner's slot times);
 - lower a threshold, budget, or limit;
-- publish a major version, run `npm login`, or store a token.
+- publish a major version, run `npm login`, or store a token;
+- mark an ID `[x]` when any Done-when or Refuses test is skipped, untested, or deferred in `docs/DECISIONS.md`.
+
+A direct owner request does not waive H0 rule 2. Log it as `OVERRIDE`, not `ASSUMED`.
 
 When unsure, choose the option that changes the least public behavior, log it in `docs/DECISIONS.md` as `ASSUMED`, and continue.

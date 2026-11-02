@@ -208,7 +208,7 @@ function parseHistory(text) {
       version: m[2],
       date: m[3],
       status: m[4],
-      features: feats.split(',').map((s) => s.trim()).filter((s) => /^[A-Z]+-\d{2}$/.test(s)),
+      features: [...feats.matchAll(/\b([A-Z]+-\d{2})\b/g)].map((x) => x[1]),
     });
   }
   return out;
@@ -262,7 +262,10 @@ function verifyRoadmap() {
     if (!items && e.status === 'shipped' && !isHotfixOf(e, history))
       errors.push(`history ${e.track} ${e.version}: no roadmap section for this version`);
     if (items && e.status === 'shipped') {
-      const allowed = new Set(items.map((i) => i.id));
+      const earlier = history.some((h) => h !== e && h.track === e.track && h.status === 'shipped' && (h.date < e.date || (h.date === e.date && cmpV(h.version, e.version) < 0)));
+      const allowed = new Set(earlier
+        ? items.map((i) => i.id)
+        : [...roadmap.entries()].filter(([k]) => k.startsWith(`${e.track} `)).flatMap(([, its]) => its.map((i) => i.id)));
       for (const f of e.features) if (!allowed.has(f)) errors.push(`history ${e.track} ${e.version}: ${f} is not in that version's roadmap (scope creep)`);
     }
     const prev = lastByTrack.get(e.track);

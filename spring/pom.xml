@@ -18,6 +18,7 @@
     <module>apiversa-webflux</module>
     <module>apiversa-kafka</module>
     <module>apiversa-kotlin</module>
+    <module>apiversa-spring-framework7</module>
   </modules>
   <properties>
     <revision>0.1.0</revision>

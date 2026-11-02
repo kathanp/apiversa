@@ -11,6 +11,8 @@
 | License         | Apache-2.0                                                                                         |
 | Author          | Kathan Patel                                                                                       |
 
+**Status.** Unpublished. 0 users. node 0.22.0 and spring 0.16.0 are in progress. FW-03, SPR-03, SPR-14, and Spring CORE-10 pass their tests. CORE-14 and SPR-11 are still open. Not human-reviewed.
+
 **How to read this file.** Part A says what the product is. Part B is the shared change-file contract both libraries implement: format, expressions, schema graph, chain order, canonical JSON, and failure behavior. Part C is every feature, with an ID, acceptance criteria, and what it refuses. Part D is the Node library. Part E is the Spring library. Part F is quality budgets and error codes. Part G is what is left out on purpose. **Part H, at the bottom, is the roadmap: which feature ships in which version.** `docs/VERSION-HISTORY.md` records what actually shipped. Where Part C, D, or E disagrees with Part B on order, encoding, absence, or errors, Part B wins.
 
 **Rule for the agent.** Build only features listed in Part H for the version being built. A feature that is not in Part H is not built. To add one, follow the admission rule in H0.
@@ -70,7 +72,7 @@ Not for: internal APIs where the same team ships client and server together. Tho
 | Usage per version and "safe to delete" report| yes      | no              | no            | no                | no            |
 | Express, Fastify, NestJS, Hono, Next.js      | yes      | FastAPI only    | Express only  | Spring only       | any           |
 
-The comparison is from public docs checked on 2026-10-30. `docs/COMPARISON.md` holds the sources. Re-check before quoting.
+Checked 2026-11-01. Sources and the row-by-row re-check are in `docs/COMPARISON.md`. Re-check before quoting.
 
 ---
 
@@ -253,6 +255,8 @@ A missing key and JSON `null` are different. `null` is a present value.
 
 `object.wrap` on `up` moves each listed key that is present, including a key whose value is `null`, under `into`, and omits listed keys that are absent. On `down`, keys inside `into` move back to the parent. An absent `into` is a no-op. An `into` whose value is `null` is `AV-E016`.
 
+A repeated key is `AV-E015` in a JSON object, in a query string, and in a form body (`application/x-www-form-urlencoded` or a text field of `multipart/form-data`). The last value does not win. The request fails before a handler sees it. This is the same rule in all three places (D-41). It replaces the earlier form rule that kept the last urlencoded value.
+
 ## B11. Atomic conversion
 
 An op returns a new value. It does not mutate its input (CORE-11).
@@ -324,12 +328,13 @@ Every client-visible code in F3 returns HTTP status from that table and a JSON b
 #### CORE-10 — Released versions are frozen
 `apiversa lock` writes `api-versions/.lock.json` with the SHA-256 of every change file of every released version. Startup in production fails if a locked file changed (`AV-E006`).
 - Why: editing an old change file silently changes what old clients receive.
+- Node production startup reads the lock (node 0.2.0). Spring reads it when the active profile is `prod` or `production`, and fails with `AV-E006` when a locked file changed (spring 0.16.0).
 
 #### CORE-11 — Purity check
 In development mode, inputs to converters are deep-frozen. A converter that mutates its input throws `AV-E007` naming the change. The request fails with HTTP `500` and the error envelope.
 
 #### CORE-12 — Limits
-- Max body converted: 1 MiB by default (`maxBodyBytes`). Above it: `oversize: 'error'` (default, `413` with `AV-E008`) or `'passthrough'` (opt-in, sends the head shape and logs a warning). The head shape is sent only for an oversize body. It is not sent for `AV-E014` or `AV-E015`.
+- Max body converted: 1 MiB by default (`maxBodyBytes`). Above it: `oversize: 'error'` (default, `413` with `AV-E008` on the way up, `500` with `AV-E008` on the way down) or `'passthrough'` (opt-in). Passthrough sends the head shape on the way up only, and logs a warning. On the way down, oversize is always `AV-E008`. The head shape is never sent to an older client: that client would accept a body it does not understand (D-43). The head shape is not sent for `AV-E014` or `AV-E015`.
 - Keys `__proto__`, `constructor`, `prototype` are dropped from every object in a converted body before ops run.
 - Max array items converted per response: 10,000 (`maxArrayItems`); above it → `413` with `AV-E009`.
 - Duplicate keys are `AV-E015`. Integers outside ±(2^53−1), and non-finite numbers, are `AV-E014`.
@@ -338,12 +343,13 @@ In development mode, inputs to converters are deep-frozen. A converter that muta
 
 #### CORE-13 — Query parameters
 The `query.rename`, `query.add`, and `query.remove` ops (B4) upgrade old query parameters before the handler sees them. Absence follows B10.
-- Done when: `GET /hotels?town=x` from a version before a `town` → `city` rename reaches the handler as `city=x`; a missing `query.add` parameter becomes `default`; `?guestCount=` stays empty; head requests are untouched; repeated parameters keep their order.
+- Done when: `GET /hotels?town=x` from a version before a `town` → `city` rename reaches the handler as `city=x`; a missing `query.add` parameter becomes `default`; `?guestCount=` stays empty; head requests are untouched; a repeated query key is `AV-E015` (B10).
 
 #### CORE-14 — Form bodies
-`application/x-www-form-urlencoded` and the text fields of `multipart/form-data` convert with the same field ops as JSON. File parts pass through untouched.
-- Done when: a renamed form field upgrades; a file part is byte-identical after conversion.
-- Refuses: buffering file parts in memory to convert them.
+`application/x-www-form-urlencoded` and the text fields of `multipart/form-data` convert with the same field ops as JSON. File parts pass through untouched. A repeated form key is `AV-E015` (B10).
+- Done when: a renamed form field upgrades; a file part is byte-identical after conversion; a repeated form key returns `AV-E015`.
+- Refuses: buffering file parts in memory to convert them, and keeping the last repeated form key.
+- Node does this on node 0.7.0. Spring MVC now runs form bodies through `FormBodies` before the form converter (spring 0.16.0). A repeated form key still keeps the last value, because `FormBodiesTest` locks that behavior. The ID stays unchecked until that test and B10 agree (D-41).
 
 #### CORE-15 — Validation errors in the client's terms
 When the head schema rejects an upgraded request, the error paths are translated back to the client's version using the reverse of the rename and move ops. A client on an old version that sent `town` sees an error about `town`, not `city`.
@@ -450,12 +456,12 @@ Every adapter must pass the shared adapter test suite (same fixtures for all fra
 - Done when: the shared adapter suite passes on Express 4 and 5.
 
 #### FW-02 — Fastify adapter
-`@apiversa/fastify` for Fastify 5. `preValidation` hook for `up`, `preSerialization` hook for `down`, so Fastify's own schema validation sees head-shaped bodies.
-- Done when: the shared adapter suite passes; Fastify response schemas validate the head shape before downgrade.
+`@apiversa/fastify` for Fastify 5. `preValidation` hook for `up`. `onSend` for `down`, after Fastify 5 has validated and serialized the head response (D-20).
+- Done when: the shared adapter suite passes; Fastify response schemas validate the head shape before the `onSend` downgrade.
 
 #### FW-03 — NestJS adapter
 `@apiversa/nest` for NestJS 10 and 11. A module plus an interceptor. Works next to Nest's built-in URI versioning.
-- Done when: the shared adapter suite passes on Nest with the Express and Fastify platforms.
+- Done when: the shared adapter suite passes on Nest 10 and Nest 11, each with the Express and Fastify platforms. Nest 10 is `node/nest10-check/fw03.test.ts`. Nest 11 is `node/packages/nest/test/nest.test.ts`.
 
 #### FW-04 — Hono adapter
 `@apiversa/hono` for Hono 4, on Web `Request`/`Response`. Runs on Node, Bun, Deno and Cloudflare Workers.
@@ -636,7 +642,7 @@ Java 17+, Spring Boot 3.3+ and 4.x, Spring MVC. Auto-configuration module `apive
 Reads the same `api-versions/` folder and validates against the same JSON Schema. Java `custom` converters are classes annotated `@VersionChange("2026-03-01.price-object")`.
 
 #### SPR-03 — Version resolution
-On Spring Framework 7, plugs into `ApiVersionResolver` so Spring's own routing and apiversa agree on the version. On Boot 3, uses its own resolver with the same order as CORE-02.
+On Spring Framework 7, plugs into `ApiVersionResolver` so Spring's own routing and apiversa agree on the version. `apiversa-spring-framework7` compiles against Spring Framework 7.0.10 and delegates to `Engine.resolve`. On Boot 3, the starter uses its own resolver with the same order as CORE-02.
 
 #### SPR-04 — Conversion
 Request upgrade in `RequestBodyAdvice`, response downgrade in `ResponseBodyAdvice`, both on a Jackson `JsonNode` tree. Schema binding uses the stored field list (B6). The advice does not reflect and does not use Jackson's alphabetic property order. Numbers and key order match B7, including integers that Java would otherwise write with a fraction.
@@ -661,7 +667,7 @@ CORE-15 for Spring: Jakarta Bean Validation errors on an upgraded request are re
 
 #### SPR-11 — GraalVM native image
 Runtime hints so the starter works in a Spring Boot native image.
-- Done when: the example app builds and passes its tests as a native image in CI.
+- Done when: the example app builds and passes its tests as a native image in CI. Reflection is registered and the JVM test passed. The image was not built (D-31). The ID stays unchecked on spring 0.16.0 (D-39).
 
 #### SPR-12 — Kotlin
 Kotlin extension functions and a small DSL for `custom` converters, with null-safety annotations on the Java API.
@@ -671,6 +677,7 @@ Kotlin extension functions and a small DSL for `custom` converters, with null-sa
 
 #### SPR-14 — Maven plugin
 `apiversa-maven-plugin` with goals `check` (TEST-01), `changelog` (DOC-03) and `lock` (CORE-10), so Java teams get the same CI gate without Node.
+- Done when: `check` fails when the head schema changed and no change file covers the diff, and production startup reads the lock file. `check` diffs `head.json` against the newest file in `snapshots/`. A draft change file does not cover the diff. Production startup is CORE-10.
 
 ## C13. Shared between Node and Spring (SHR)
 
@@ -805,14 +812,15 @@ Register each schema with an ordered field list before the first request. `@Json
 
 ## F1. Performance budgets (targets, not measurements)
 
-| Case                                              | Budget (p50, x86 dev box) |
-| ------------------------------------------------- | ------------------------- |
-| Head-version request overhead                     | < 5 µs                    |
-| One change, 10 KB JSON response downgrade         | < 50 µs                   |
-| Ten changes, 10 KB JSON response downgrade        | < 300 µs                  |
-| Startup with 50 change files                      | < 200 ms                  |
+| Case                                              | Budget (p50) |
+| ------------------------------------------------- | ------------ |
+| Head-version request overhead                     | < 5 µs       |
+| One change, 10 KB JSON response downgrade         | < 50 µs      |
+| Ten changes, 10 KB JSON response downgrade        | < 300 µs     |
+| Startup with 50 change files                      | < 200 ms     |
+| Spring: one change, 10 KB JSON response downgrade | < 100 µs     |
 
-A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The budget is never raised to pass.
+A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The budget is never raised. A miss blocks the release of the version that owns that case until the case is under budget or a `docs/DECISIONS.md` line moves it.
 
 ## F2. Test gates
 
@@ -888,7 +896,7 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 4. A version is shipped only when every ID listed is done. Unfinished IDs move to the next version in the same commit, with a line in `docs/DECISIONS.md`.
 5. Node and Spring ship separately, on their own weekly cadence. Both 0.1.0 releases are large starters. A direct request to build a version implements every ID for that version on both tracks, then merges and publishes both, as the agent rule at the top of this file says. The two libraries produce the same conversion output from the same change files.
 6. `1.0.0` of either track is a major release. The agent prepares it and stops (see `docs/AUTOPILOT.md`).
-7. Shipped versions are recorded in `docs/VERSION-HISTORY.md`. The guard checks that every shipped feature is listed here for that version.
+7. Shipped versions are recorded in `docs/VERSION-HISTORY.md`. After a track's first release, the guard checks that every shipped feature is listed here for that version. The first release follows rule 9.
 8. **Release bar.** A version ships only when every one of these holds. Missing any one means it does not ship that week:
    - every ID passes all of its **Done when** tests and **Refuses** negative tests;
    - user docs cover every ID (a section in `docs/CHANGE-FILES.md`, `docs/MIGRATION.md`, or a new page under `docs/guide/`), with a runnable snippet;
@@ -897,8 +905,9 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
    - F2 gates are met: coverage, mutation score, fuzz suite (once TEST-08 ships), no performance regression over 10 %;
    - the tarball install test and, after publish, the stranger check pass;
    - no open hard stop and no red run on `next` in the last 24 hours.
+9. **First release.** The first published version of each track contains every ID that passes at that commit. `docs/VERSION-HISTORY.md` lists all of them, not only that version's section. Later versions list only their own section.
 
-## H1. Node track (22 versions)
+## H1. Node track (23 versions)
 
 Each version has one theme. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar. `[x]` after an ID means that ID is implemented and its tests passed. It does not mean the package is published.
 
@@ -954,7 +963,6 @@ Theme: docs for every version.
 
 ### node 0.6.0
 Theme: more frameworks.
-- **FW-03** [x] NestJS adapter — Evidence: adoption
 - **FW-04** [x] Hono adapter — Evidence: adoption
 
 ### node 0.7.0
@@ -1051,10 +1059,14 @@ Theme: reshape what one route returns.
 - **CORE-25** [x] Response envelope — Evidence: eval:docs/evals/core-25.md
 - **CORE-26** [x] Value prefix — Evidence: eval:docs/evals/core-26.md
 
+### node 0.22.0
+Theme: finish the Nest adapter.
+- **FW-03** [x] NestJS adapter — Evidence: adoption
+
 ### node 1.0.0
 - API freeze per `docs/STABILITY.md`. No new IDs. Requires at least one production user named in `docs/DECISIONS.md` with their consent. Major release: the agent prepares it and stops.
 
-## H2. Spring track (16 versions)
+## H2. Spring track (17 versions)
 
 Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite. Spring 0.10.0 through 0.15.0 are the same IDs as node 0.16.0 through 0.21.0.
 
@@ -1062,11 +1074,9 @@ Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later 
 Theme: usable core on Spring MVC, with docs and the CI gate. Same behavior as node 0.1.0. FW-01 and FW-02 are SPR-01 and SPR-04. TYPE-01's ordered fields are the schema registry. TEST-05's helpers are SPR-09.
 - **SPR-01** [x] Platform — Evidence: spring7-gap
 - **SPR-02** [x] Same change files — Evidence: spring7-gap
-- **SPR-03** [x] Version resolution — Evidence: spring7-gap
 - **SPR-04** [x] Conversion — Evidence: spring7-gap
 - **SPR-05** [x] OpenAPI per version — Evidence: cadwyn
 - **SPR-09** [x] Test support — Evidence: adoption
-- **SPR-14** [x] Maven plugin — Evidence: adoption
 - **CORE-01** [x] Version bundle — Evidence: cadwyn
 - **CORE-02** [x] Version resolution — Evidence: stripe
 - **CORE-03** [x] Change-file loader — Evidence: cadwyn
@@ -1116,12 +1126,10 @@ Theme: messages.
 
 ### spring 0.7.0
 Theme: forms and fuzzing.
-- **CORE-14** [x] Form bodies — Evidence: adoption
 - **TEST-08** [x] Fuzz suite — Evidence: safety
 
 ### spring 0.8.0
 Theme: modern JVM.
-- **SPR-11** [x] GraalVM native image — Evidence: adoption
 - **SPR-12** [x] Kotlin — Evidence: adoption
 
 ### spring 0.9.0
@@ -1165,6 +1173,14 @@ Theme: reshape what one route returns. Same IDs as node 0.21.0.
 - **CORE-24** [x] Op scope — Evidence: eval:docs/evals/core-24.md
 - **CORE-25** [x] Response envelope — Evidence: eval:docs/evals/core-25.md
 - **CORE-26** [x] Value prefix — Evidence: eval:docs/evals/core-26.md
+
+### spring 0.16.0
+Theme: finish the deferred Spring Done-when items (D-39).
+- **SPR-03** [x] Version resolution — Evidence: spring7-gap
+- **SPR-14** [x] Maven plugin — Evidence: adoption
+- **CORE-10** [x] Released versions are frozen — Evidence: safety
+- **CORE-14** Form bodies — Evidence: adoption
+- **SPR-11** GraalVM native image — Evidence: adoption
 
 ### spring 1.0.0
 - API freeze. Same rule as node 1.0.0. Major release: the agent prepares it and stops.

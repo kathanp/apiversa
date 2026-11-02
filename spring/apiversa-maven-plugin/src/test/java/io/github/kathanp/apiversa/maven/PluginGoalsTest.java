@@ -84,6 +84,48 @@ class PluginGoalsTest {
         assertTrue(matrix.contains("\"2026-03-01\":[]") || matrix.contains("\"2026-03-01\": []"));
     }
 
+    @Test
+    void SPR14_checkFailsWhenHeadChangedWithoutAChangeFile(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("versions.yaml"), """
+                head: "2026-03-01"
+                versions:
+                  - date: "2026-03-01"
+                  - date: "2026-01-15"
+                default: oldest
+                """);
+        Files.createDirectories(dir.resolve("snapshots"));
+        Files.writeString(dir.resolve("snapshots/2026-01-15.json"), "{\"Hotel\":[{\"name\":\"id\"}]}");
+        Files.writeString(dir.resolve("head.json"), "{\"Hotel\":[{\"name\":\"id\"},{\"name\":\"name\"}]}");
+        CheckMojo check = new CheckMojo();
+        set(check, "dir", dir.toFile());
+        set(check, "today", "2026-10-30");
+        check.setLog(new SystemStreamLog());
+        assertTrue(assertThrows(MojoFailureException.class, check::execute).getMessage().contains("Hotel.name added"));
+        Files.writeString(dir.resolve("2026-03-01.add-name.yaml"), """
+                version: "2026-03-01"
+                id: add-name
+                description: Hotel.name was added.
+                draft: true
+                changes:
+                  - op: field.add
+                    schema: Hotel
+                    path: name
+                    default: Bay
+                """);
+        assertTrue(PluginGoals.headDiff(dir).get(0).contains("Hotel.name added"));
+        Files.writeString(dir.resolve("2026-03-01.add-name.yaml"), """
+                version: "2026-03-01"
+                id: add-name
+                description: Hotel.name was added.
+                changes:
+                  - op: field.add
+                    schema: Hotel
+                    path: name
+                    default: Bay
+                """);
+        check.execute();
+    }
+
     private static void set(Object target, String name, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);

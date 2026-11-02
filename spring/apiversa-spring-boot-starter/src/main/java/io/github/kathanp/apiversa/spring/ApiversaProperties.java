@@ -12,6 +12,7 @@ public class ApiversaProperties {
     /** Unset follows the environment: on outside production, off for the {@code prod} or {@code production} profile unless this is true. */
     private Boolean trace;
     private boolean traceOn;
+    private boolean production;
     private String oversize = "error";
     private int maxBodyBytes = Json.MAX_BODY_BYTES;
     private int maxArrayItems = Json.MAX_ARRAY_ITEMS;
@@ -54,7 +55,13 @@ public class ApiversaProperties {
         for (String profile : environment.getActiveProfiles()) {
             if (profile.equalsIgnoreCase("prod") || profile.equalsIgnoreCase("production")) production = true;
         }
+        this.production = production;
         traceOn = Boolean.TRUE.equals(trace) || (!production && !Boolean.FALSE.equals(trace));
+    }
+
+    /** True after {@link #resolveTrace} when the active profile is {@code prod} or {@code production}. */
+    public boolean isProduction() {
+        return production;
     }
 
     public boolean isTrace() {

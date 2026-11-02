@@ -2,6 +2,7 @@ package io.github.kathanp.apiversa.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kathanp.apiversa.Engine;
+import io.github.kathanp.apiversa.ReleasedLock;
 import io.github.kathanp.apiversa.Json.SchemaDef;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,6 +42,8 @@ public class ApiversaAutoConfiguration {
     @ConditionalOnMissingBean
     Engine.Bundle apiversaBundle(ApiversaProperties properties, ObjectProvider<ApiversaSchemas> schemas, ObjectProvider<Engine.Converter> converters, Environment environment) throws IOException {
         properties.resolveTrace(environment);
+        Path folder = materialize(properties.getDir());
+        if (properties.isProduction()) ReleasedLock.check(folder);
         Map<String, Engine.Converter> found = new LinkedHashMap<>();
         converters.orderedStream().forEach(converter -> {
             VersionChange mark = AnnotationUtils.findAnnotation(converter.getClass(), VersionChange.class);
@@ -48,7 +51,7 @@ public class ApiversaAutoConfiguration {
         });
         Map<String, SchemaDef> registry = schemas.getIfAvailable(ApiversaSchemas::new).registry();
         String today = properties.getToday() == null || properties.getToday().isBlank() ? null : properties.getToday();
-        return Engine.load(materialize(properties.getDir()), today, registry, found, new Engine.Limits(properties.getMaxBodyBytes(), properties.getMaxArrayItems()), null, properties.getOversize());
+        return Engine.load(folder, today, registry, found, new Engine.Limits(properties.getMaxBodyBytes(), properties.getMaxArrayItems()), null, properties.getOversize());
     }
 
     @Bean

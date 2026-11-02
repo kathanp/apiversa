@@ -24,6 +24,18 @@ If you later decide to give CI a granular npm token limited to this package, the
 
 Releases on Maven Central are permanent. A broken release is fixed by the next patch release. The agent records it as `failed` in the version history the same way.
 
+The owner publishes that patch. The agent token cannot create the tag (D-42). After the owner tags `spring-v<x.y.z>` on `main`, the publish workflow uploads the Maven artifacts. There is no unpublish step and no guaranteed clock time. The patch ships on the next green release run after the owner tags it. Until that tag exists, users stay on the broken version.
+
 ## Pre-releases
 
 `next` pre-releases and snapshots carry no promise. A broken one is replaced by the next run. It is not recorded in the version history.
+
+## Repoint `next`
+
+`next` is the branch and the npm dist-tag.
+
+1. Branch: `git fetch origin` and `git checkout next`. To drop a bad commit, the owner resets `next` to the last good commit and force-pushes. The agent does not force-push. Branch protection blocks force-push until the owner allows that one push.
+2. npm dist-tag: from the owner's machine, with 2FA, `npm dist-tag add <package>@<good-version> next`. The CI token cannot move tags.
+3. Maven snapshots: the next snapshot publish replaces the snapshot. There is no tag to move. A consumer who pinned the bad snapshot timestamp must rebuild after the next snapshot.
+
+Do this before any stable PR is merged. A stable version that already reached `main` is fixed by a patch, not by moving `next`.

@@ -3,6 +3,7 @@ package io.github.kathanp.apiversa.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kathanp.apiversa.ApiversaException;
 import io.github.kathanp.apiversa.Engine;
+import io.github.kathanp.apiversa.FormBodies;
 import io.github.kathanp.apiversa.Json;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -389,6 +390,11 @@ final class ApiversaAdvice implements RequestBodyAdvice, ResponseBodyAdvice<Obje
         String schema = ApiversaMvc.schema(parameter, ApiversaRequest.class);
         if (request == null || version == null || schema == null || !bodyWork(version, "up")) return inputMessage;
         byte[] raw = inputMessage.getBody().readAllBytes();
+        MediaType contentType = inputMessage.getHeaders().getContentType();
+        if (form(contentType)) {
+            String converted = FormBodies.convert(bundle, new String(raw, StandardCharsets.UTF_8), contentType.toString(), schema, version, "up").body();
+            return message(inputMessage, converted.getBytes(StandardCharsets.UTF_8));
+        }
         try {
             Engine.Result result = Engine.execute(bundle, new Engine.Request(schema, version, raw, request.getMethod(), request.getRequestURI(), ApiversaMvc.query(request), List.of(), null, false, null, properties.isTrace()), "up");
             if (!result.parsed()) return message(inputMessage, raw);
@@ -464,6 +470,11 @@ final class ApiversaAdvice implements RequestBodyAdvice, ResponseBodyAdvice<Obje
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("errors", ApiversaValidation.errors(bundle, version, schema == null ? "" : schema, exception.getBindingResult().getFieldErrors()));
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+    }
+
+    private static boolean form(MediaType contentType) {
+        if (contentType == null) return false;
+        return MediaType.APPLICATION_FORM_URLENCODED.includes(contentType) || MediaType.MULTIPART_FORM_DATA.includes(contentType);
     }
 
     private boolean bodyWork(String version, String direction) {

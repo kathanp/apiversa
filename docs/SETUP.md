@@ -2,6 +2,18 @@
 
 After this, the agents run on their own. These steps need your accounts, so no agent can do them.
 
+## 0. Checklist
+
+D-35 says this repo has no git remote. Nothing past §1 has happened. Leave a box empty until you have done that step.
+
+- [ ] Repo pushed
+- [ ] Remote set
+- [ ] Trademark search
+- [ ] npm name re-check
+- [ ] `@apiversa` org
+- [ ] Maven namespace verified
+- [ ] Snapshots enabled
+
 ## 1. Repository
 1. Create the GitHub repo `kathanp/apiversa` (public). Push this folder to `main`.
 2. Create branch `next` from `main` and push it.
@@ -9,12 +21,13 @@ After this, the agents run on their own. These steps need your accounts, so no a
 4. Settings → Branches → protect `main` and `next`:
    - require status checks: `node`, `spring`, `guard`;
    - block force pushes and deletion;
-   - **do not** require pull-request reviews (the agent cannot give one; AUTOPILOT stops with `HS-PROTECTION` if it is required).
+   - `main`: require 1 pull-request review (D-42). The agent opens the PR and waits.
+   - `next`: do not require pull-request reviews. Pre-release merges stay on `next` without a review.
 5. Settings → Security → enable private vulnerability reporting.
 
 ## 2. Agent credentials on your computer
 1. Install `cursor-agent` and sign in. Check `cursor-agent --help`.
-2. Install the GitHub CLI and run `gh auth login`. Use a **fine-grained token** limited to this one repository with: Contents read/write, Pull requests read/write, Actions read. Nothing else.
+2. Install the GitHub CLI and run `gh auth login`. Use a **fine-grained token** limited to this one repository with: Contents read/write, Pull requests read/write, Actions read. Nothing else. The token cannot create tags. The owner creates stable tags (D-42).
 3. Do not store npm or Maven credentials on the computer.
 
 ## 3. npm

@@ -42,9 +42,9 @@ Change `time` to move a slot, or add a third slot. The change applies at the nex
 
 The launch length and daily cooldown are in `guard.config.json` → `launch` (`days: 28`, `cooldownDays: 1`). That file **is** protected, so an agent run cannot loosen the release rules. Set those values before the first release tag. A later change makes the release check refuse until it is part of a release you make yourself.
 
-In India time these land around 7:30–8:30 PM and 7:30–8:30 AM, depending on US daylight saving.
+9:00 AM CST is 8:30 PM IST. 9:00 AM CDT is 7:30 PM IST. 9:00 PM CST is 8:30 AM IST the next day. 9:00 PM CDT is 7:30 AM IST the next day.
 
-**The computer must be awake, online, and logged in.** If it wakes up within 2 hours of a slot, the slot still runs. Later than that, the slot is recorded as missed in `.autopilot/slots/` and the next run reports it. `node scripts/scheduler.mjs --status` shows the last slots.
+**The computer must be awake, online, and logged in.** If it wakes up within 2 hours of a slot, the slot still runs. While you are traveling, or the machine is off for more than 2 hours past a slot, that slot is missed. It is recorded in `.autopilot/slots/`. The next run reports `MISSED`. Nothing is released to catch up. The version waits for the next slot the machine is awake for. `node scripts/scheduler.mjs --status` shows the last slots.
 
 ## macOS (launchd)
 

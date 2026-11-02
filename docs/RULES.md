@@ -28,11 +28,13 @@ These rules keep every change reviewable. They win over every other file. `docs/
 - Deterministic. No `Date.now()`, `new Date()` without an argument, `Math.random()` in tests (Node). No `System.currentTimeMillis()` or `Random` without a seed in tests (Java).
 - No `.only`, `.skip`, `it.todo`, `xit`, `xdescribe`, `@Disabled` without a reason comment on the line above.
 - Existing tests and fixtures are append-only. A line is never removed or changed. A file is never deleted or renamed.
+- Every Refuses line has a test whose name contains the ID.
 - Fake secrets are built by concatenation, never one realistic literal.
 
 ## Numbers
 
 - Do not change a default, limit, threshold, budget or error code unless `docs/FEATURES-SPEC.md` and `CHANGELOG.md` change in the same commit, with a `docs/DECISIONS.md` line.
+- A missed budget blocks the release of the version that owns that case until the case is under budget or a `docs/DECISIONS.md` line moves it.
 - Do not publish a number (benchmark, coverage, adoption) unless a script in this repo produced it and the file it came from is named next to it.
 
 ## Commits
@@ -44,6 +46,7 @@ These rules keep every change reviewable. They win over every other file. `docs/
 ## Release
 
 - Publishing happens only in GitHub Actions from a tag on `main`.
+- Stable tags on `main` are created by the owner.
 - Never publish a major version from an agent run.
 - Never unpublish. A broken version is fixed with a patch.
 - No npm or Maven tokens on the developer machine or in the repo.

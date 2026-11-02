@@ -2,7 +2,7 @@
 
 apiversa is a library that runs inside an API server. The host app writes handlers for the newest API version only. apiversa converts each request from the client's pinned version up to the head, and each response from the head back down to the client's version, using change files. It does not run old handlers (except `endpoint.remove` legacy handlers the host keeps), does not proxy traffic, and does not call the network.
 
-Current versions: **node 0.1.0** and **spring 0.1.0** (both in progress, not yet published). A direct request for a version covers both tracks through merge and publish. The guard checks that these match `node/packages/core/package.json` and `spring/pom.xml`.
+Current versions: package files are **node 0.1.0** and **spring 0.1.0**. The tree implements the Part H lists through **node 0.22.0** and **spring 0.16.0**. Nothing is published. CORE-14 and SPR-11 on spring 0.16.0 are still open. The guard checks that this page names the versions in `node/packages/core/package.json` and `spring/pom.xml`. A direct request for a version covers both tracks through merge and publish.
 
 The Node core (`apiversa`) has no runtime dependencies. Framework adapters list their framework as a peer dependency. The Java core (`apiversa-core-java`) depends only on Jackson and SnakeYAML Engine. Both read the same change files and must produce byte-identical output.
 
@@ -62,8 +62,14 @@ Outgoing webhooks use the same `down` path through `downgradeEvent`. A subscribe
 | `spring/apiversa-webflux/`             | WebFlux filter: same conversion, plus NDJSON and SSE lines   |
 | `spring/apiversa-kafka/`               | Kafka records and queue message conversion                   |
 | `spring/apiversa-kotlin/`              | Kotlin converter DSL and client-field extension              |
+| `spring/apiversa-spring-framework7/`   | Spring Framework 7 `ApiVersionResolver`                      |
 
-Rows marked (planned) do not exist yet. When the agent creates a path, it removes "(planned)" from that row in the same commit. The guard fails on a row that names a missing path without "(planned)".
+Rows marked (planned) do not exist yet. When the agent creates a path, it removes "(planned)" from that row in the same commit. The guard fails on a row that names a missing path without "(planned)". Every row in this table was checked against the tree on 2026-11-01. Each path exists, so none is marked (planned).
+
+## Known gaps
+
+- A repeated form key still keeps the last value. `FormBodiesTest` locks that, and B10 now says `AV-E015` (D-41). CORE-14 stays unchecked. MVC does switch a form body onto `FormBodies` before the form converter.
+- `examples/spring-native` has not been built as a native image. This machine has no `native-image`, and workflow files are protected (SPR-11, D-31).
 
 ## Design choices that matter
 

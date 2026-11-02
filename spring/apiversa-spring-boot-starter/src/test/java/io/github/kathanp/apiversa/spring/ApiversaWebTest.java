@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.RestController;
 
 @SpringBootTest(classes = ApiversaWebTest.App.class)
@@ -78,6 +79,17 @@ class ApiversaWebTest {
     }
 
     @Test
+    void CORE14_aFormFieldIsUpgradedBeforeTheHandler() throws Exception {
+        mvc.perform(post("/hotels/form").header("Api-Version", "2026-01-15").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("id=h_1"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"id\":\"h_1\"}"));
+        String file = "--b\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"a.txt\"\r\n\r\nhello-file\r\n--b--\r\n";
+        mvc.perform(post("/hotels/file").header("Api-Version", "2026-01-15").contentType("multipart/form-data; boundary=b").content(file))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("hello-file")));
+    }
+
+    @Test
     void propertyOrderIsTheRegistry() {
         @JsonPropertyOrder({"b", "a"})
         class Hotel {}
@@ -130,6 +142,24 @@ class ApiversaWebTest {
         @GetMapping("/health")
         String health() {
             return "ok";
+        }
+
+        @PostMapping(path = "/hotels/form", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+        @ApiversaRequest("Hotel")
+        @ApiversaResponse("Hotel")
+        Map<String, Object> form(@RequestBody MultiValueMap<String, String> body) {
+            if (!"Bay".equals(body.getFirst("name"))) throw new IllegalStateException("form was not upgraded");
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", body.getFirst("id"));
+            out.put("name", "Bay");
+            return out;
+        }
+
+        @PostMapping(path = "/hotels/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        @ApiversaRequest("Hotel")
+        String file(@RequestBody String body) {
+            if (!body.contains("filename=\"a.txt\"") || !body.contains("hello-file")) throw new IllegalStateException("file was rewritten");
+            return body;
         }
     }
 }
