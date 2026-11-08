@@ -18,30 +18,41 @@ public final class GenerateClient {
         return write(dir, pkg, "java");
     }
 
-    /** `java` writes the CLIENT-03 record. `python` writes the same rewind as a class file. */
+    /** `java` writes the CLIENT-03 record. `python` and `go` write the same rewind. */
     public static List<Path> write(Path dir, String pkg, String lang) throws IOException {
+        Path out = dir.resolve("generated");
+        Files.createDirectories(out);
+        List<Path> written = new ArrayList<>();
+        for (Source source : sources(dir, pkg, lang)) {
+            Path file = out.resolve(source.name());
+            Files.writeString(file, source.text());
+            written.add(file);
+        }
+        return written;
+    }
+
+    /** Render one language in memory. This does not write. */
+    public static List<Source> sources(Path dir, String pkg, String lang) throws IOException {
         String language = lang == null || lang.isBlank() ? "java" : lang;
         if (!"java".equals(language) && !"python".equals(language) && !"go".equals(language)) throw io.github.kathanp.apiversa.ApiversaException.fail("AV-E001", "startup");
         String packageName = pkg == null || pkg.isBlank() ? "apiversa.client.generated" : pkg;
         Map<String, List<Field>> head = readHead(dir.resolve("head.json"));
         List<String> dates = dates(dir);
         List<Eject.ChangeFile> changes = Eject.readChanges(dir);
-        Path out = dir.resolve("generated");
-        Files.createDirectories(out);
-        List<Path> written = new ArrayList<>();
+        List<Source> files = new ArrayList<>();
         for (String date : dates) {
             Map<String, List<Field>> shapes = rewind(head, changes, date);
             for (Map.Entry<String, List<Field>> schema : shapes.entrySet()) {
                 String type = schema.getKey() + "_" + date.replace("-", "_");
                 String suffix = "python".equals(language) ? ".py" : "go".equals(language) ? ".go" : ".java";
-                Path file = out.resolve(type + suffix);
                 String text = "python".equals(language) ? python(type, schema.getValue(), date, head.keySet()) : "go".equals(language) ? go(type, schema.getValue(), date, head.keySet()) : record(packageName, type, schema.getValue());
-                Files.writeString(file, text);
-                written.add(file);
+                files.add(new Source(type + suffix, text));
             }
         }
-        return written;
+        return files;
     }
+
+    public record Source(String name, String text) {}
 
     private static String go(String type, List<Field> fields, String date, java.util.Set<String> names) {
         StringBuilder out = new StringBuilder("package generated\n\ntype ").append(type).append(" struct {\n");

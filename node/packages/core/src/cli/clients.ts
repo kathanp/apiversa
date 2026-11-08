@@ -36,6 +36,23 @@ export function writeClientFiles(dir: string, lang: ClientLang = 'java', today?:
   });
 }
 
+/**
+ * Compare Python and Go sources to the files already in `generated/`.
+ * A difference returns false. This function does not write.
+ */
+export function clientsMatch(dir: string, today?: string): boolean {
+  for (const lang of ['python', 'go'] as const) {
+    for (const file of clientSources(dir, lang, today)) {
+      try {
+        if (readFileSync(join(dir, 'generated', file.name), 'utf8') !== file.text) return false;
+      } catch {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function registry(head: Record<string, HeadField[]>): Record<string, { fields: { name: string }[] }> {
   const out: Record<string, { fields: { name: string }[] }> = {};
   for (const [name, fields] of Object.entries(head)) out[name] = { fields: fields.map((field) => ({ name: field.name })) };

@@ -18,7 +18,7 @@ import { replay } from './replay.js';
 import { retire } from './retire.js';
 import { typeDiff } from './typeDiff.js';
 import { writeAsyncApi } from './asyncapi.js';
-import { writeClientFiles, type ClientLang } from './clients.js';
+import { clientsMatch, writeClientFiles, type ClientLang } from './clients.js';
 import { writeCompat } from './compat.js';
 import { rewriteFailure, rewriteJsonl } from './rewrite.js';
 import { writeSnippets } from './snippets.js';
@@ -196,6 +196,13 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
     }
     for (const file of result.files) process.stdout.write(`wrote ${file}\n`);
     return 0;
+  }
+  if (command === 'clients') {
+    if (!rest.includes('--check')) {
+      process.stderr.write('usage: apiversa clients --check [api-versions]\n');
+      return 1;
+    }
+    return clientsMatch(dir) ? 0 : 1;
   }
   if (command === 'generate-client') {
     const lang = flag(rest, '--lang') ?? 'java';
