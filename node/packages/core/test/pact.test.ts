@@ -41,6 +41,24 @@ describe('TEST-09 pact file', () => {
     const parsed = JSON.parse(readFileSync(out, 'utf8')) as { interactions: unknown[] };
     expect(parsed.interactions).toHaveLength(1);
   });
+
+  it('writes an empty list when interactions are absent and deletes a stale file on a bad input', () => {
+    const dir = bundle();
+    const input = join(dir, 'pact.json');
+    const out = join(dir, 'pact-result.json');
+    writeFileSync(out, 'stale');
+    writeFileSync(input, '{');
+    expect(runCli(['node', 'apiversa', 'pact', '--in', input, '--out', out, dir])).toBe(1);
+    expect(existsSync(out)).toBe(false);
+    writeFileSync(input, '{"nope":true}');
+    expect(runCli(['node', 'apiversa', 'pact', '--in', input, '--out', out, dir])).toBe(0);
+    expect(readFileSync(out, 'utf8')).toBe('{"interactions":[]}\n');
+    writeFileSync(input, '{"interactions":[{}]}');
+    expect(runCli(['node', 'apiversa', 'pact', '--in', input, '--out', out, dir])).toBe(0);
+    const parsed = JSON.parse(readFileSync(out, 'utf8')) as { interactions: { request: { body: unknown } }[] };
+    expect(parsed.interactions).toHaveLength(1);
+    expect(parsed.interactions[0]?.request.body).toEqual({});
+  });
 });
 
 function bundle(): string {

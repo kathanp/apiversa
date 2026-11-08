@@ -37,4 +37,11 @@ describe('field.list', () => {
       ),
     ).toThrow(expect.objectContaining({ code: 'AV-E001' }));
   });
+
+  it('leaves a missing side alone and rejects a value that is not an array', () => {
+    expect(runOp(op, {}, 'up', ['city', 'cities'])).toEqual({});
+    expect(runOp(op, {}, 'down', ['city', 'cities'])).toEqual({});
+    expect(() => runOp(op, { city: 'Paris', cities: ['Lyon'] }, 'down')).toThrow(expect.objectContaining({ code: 'AV-E020', status: 500 }));
+    expect(() => runOp(op, { cities: 'Paris' }, 'down')).toThrow(expect.objectContaining({ code: 'AV-E023' }));
+  });
 });

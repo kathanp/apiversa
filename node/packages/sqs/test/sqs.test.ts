@@ -42,4 +42,14 @@ describe('EVT-05 SQS', () => {
     });
     expect(sqs(av, 'Hotel').upgrade({ city: 'Paris' }, { 'Api-Version': '2026-01-15' })).toBeUndefined();
   });
+
+  it('returns no body when a downgrade fails', () => {
+    const av = createApiversa({
+      dir: dir('apiversa-sqs-down-', 'version: "2026-03-01"\nid: boom\ndescription: "boom"\nchanges:\n  - op: custom\n    converter: boom\n'),
+      development: false,
+      trace: false,
+      converters: { boom: { down() { throw new ApiversaError('AV-E016', 'down'); } } },
+    });
+    expect(sqs(av, 'Hotel').downgrade({ locality: 'Paris' }, '2026-01-15')).toBeUndefined();
+  });
 });

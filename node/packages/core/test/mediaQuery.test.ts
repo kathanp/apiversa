@@ -49,6 +49,38 @@ describe('CORE-37 query version', () => {
   });
 });
 
+describe('media and query parameter edges', () => {
+  it('ignores a content type that has no version parameter', () => {
+    const on = createApiversa({ dir: bundle(), development: false, trace: false, mediaType: true, queryVersion: 'api-version' });
+    expect(on.resolveVersion({ headers: { 'content-type': 'application/json' } })).toBe('2026-03-01');
+    expect(on.resolveVersion({ headers: { 'content-type': 'application/json; charset=utf-8' } })).toBe('2026-03-01');
+    expect(on.resolveVersion({ headers: { 'content-type': ['text/plain', 'application/vnd.hotel+json;version=2026-01-15'] } })).toBe('2026-01-15');
+    expect(on.resolveDecision({ query: 'api-version=2026-01-15' }).source).toBe('query');
+  });
+
+  it('reads quoted versions, extra parameters, and conflicting media versions', () => {
+    const on = createApiversa({ dir: bundle(), development: false, trace: false, mediaType: true });
+    expect(on.resolveVersion({ headers: { 'content-type': 'application/vnd.hotel+json; version="2026-01-15"' } })).toBe('2026-01-15');
+    expect(on.resolveVersion({ headers: { 'content-type': "application/vnd.hotel+json; version='2026-01-15'" } })).toBe('2026-01-15');
+    expect(on.resolveVersion({ headers: { 'content-type': 'application/vnd.hotel+json;version=2026-01-15;charset=utf-8' } })).toBe('2026-01-15');
+    expect(on.resolveDecision({ headers: { 'content-type': 'application/vnd.hotel+json;version=2026-01-15' } }).source).toBe('media');
+    expect(() => on.resolveVersion({ headers: { 'content-type': 'application/vnd.hotel+json;version=2026-01-15;version=2026-03-01' } })).toThrow(expect.objectContaining({ code: 'AV-E002' }));
+    expect(() => on.resolveVersion({ headers: { 'content-type': 'application/vnd.hotel+json; version="2026-01-15' } })).toThrow(expect.objectContaining({ code: 'AV-E002' }));
+  });
+
+  it('reads an explicit query, skips other names, and rejects a bad encoding', () => {
+    const on = createApiversa({ dir: bundle(), development: false, trace: false, queryVersion: 'api-version' });
+    expect(on.resolveVersion({ query: '?api-version=2026-01-15' })).toBe('2026-01-15');
+    expect(on.resolveVersion({ query: 'note=a+b&api-version=2026-01-15' })).toBe('2026-01-15');
+    expect(() => on.resolveVersion({ query: 'api-version' })).toThrow(expect.objectContaining({ code: 'AV-E002' }));
+    expect(on.resolveVersion({ query: 'other' })).toBe('2026-03-01');
+    expect(on.resolveVersion({ query: '' })).toBe('2026-03-01');
+    expect(on.resolveVersion({ path: '/hotels' })).toBe('2026-03-01');
+    expect(() => on.resolveVersion({ query: 'api-version=2026-01-15&api-version=2026-03-01' })).toThrow(expect.objectContaining({ code: 'AV-E002' }));
+    expect(on.resolveVersion({ query: 'bad%&api-version=2026-01-15' })).toBe('2026-01-15');
+  });
+});
+
 function bundle(): string {
   const dir = mkdtempSync(join(tmpdir(), 'apiversa-resolve-'));
   writeFileSync(join(dir, 'versions.yaml'), 'head: "2026-03-01"\nversions:\n  - date: "2026-03-01"\n  - date: "2026-01-15"\ndefault: latest\n');
