@@ -6,12 +6,14 @@ One section per track and version, newest version first. Node and Spring are int
 
 - CORE-33 Field join
 - CORE-34 Field list
+- CORE-35 Null for an absent field
 - Migration: none. `field.join`, `field.list`, and `field.null` are new ops. Existing change files are unchanged.
 
 ## node 1.5.0 (unreleased)
 
 - CORE-33 Field join
 - CORE-34 Field list
+- CORE-35 Null for an absent field
 - Migration: none. `field.join` is a new op. A change file that uses it fails startup until this version.
 
 ## node 0.22.0 (unreleased)

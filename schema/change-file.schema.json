@@ -806,6 +806,27 @@
         {
           "properties": {
             "op": {
+              "const": "field.null"
+            },
+            "schema": {
+              "$ref": "#/$defs/name"
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            }
+          },
+          "required": [
+            "schema",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": {
               "const": "field.deprecate"
             },
             "schema": {

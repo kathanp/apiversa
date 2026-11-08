@@ -1,0 +1,8 @@
+{
+  "schema": "Hotel",
+  "fields": ["stars"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "input": {},
+  "expected": { "stars": null }
+}

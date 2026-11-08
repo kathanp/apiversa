@@ -60,6 +60,7 @@ export const DATA_OPS: ReadonlySet<string> = new Set([
   'field.split',
   'field.join',
   'field.list',
+  'field.null',
   'field.copy',
   'field.add',
   'field.remove',

@@ -832,6 +832,7 @@ public final class Engine {
             case "field.split" -> split(obj, text(op, "from"), text(op, "left"), text(op, "right"), text(op, "separator"), direction);
             case "field.join" -> join(obj, text(op, "from"), text(op, "left"), text(op, "right"), text(op, "separator"), direction);
             case "field.list" -> list(obj, text(op, "from"), text(op, "to"), direction);
+            case "field.null" -> nullField(obj, text(op, "path"), direction);
             case "field.copy" -> copy(obj, text(op, "from"), text(op, "to"), direction);
             case "field.add" -> add(obj, text(op, "path"), op.get("default"), direction);
             case "field.remove" -> remove(obj, text(op, "path"), op.get("default"), direction);
@@ -1017,6 +1018,17 @@ public final class Engine {
         if (end <= 0) return false;
         for (int i = end + 1; i < value.length(); i++) if ("gimsuy".indexOf(value.charAt(i)) < 0) return false;
         return true;
+    }
+
+    /** Up writes JSON null for an absent key. Down removes a JSON null. */
+    private static void nullField(Obj root, String path, String when) {
+        for (Leaf leaf : leaves(root, path, when)) {
+            if ("up".equals(when)) {
+                if (!leaf.exists) leaf.parent.set(leaf.key, Json.Null.INSTANCE);
+            } else if (leaf.exists && read(leaf) instanceof Json.Null) {
+                leaf.parent.remove(leaf.key);
+            }
+        }
     }
 
     /** Up wraps `from` in a one-element array. Down unwraps that array. */
