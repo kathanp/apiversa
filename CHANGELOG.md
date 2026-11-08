@@ -6,13 +6,15 @@ One section per track and version, newest version first. Node and Spring are int
 
 - SHR-07 Bundle diff
 - TEST-09 Pact file
-- Migration: none. `mvn apiversa:bundle-diff` writes one JSON file and does not copy either directory. `mvn apiversa:pact` writes nothing when the input is missing.
+- GW-03 Upstream per bundle
+- Migration: none. `mvn apiversa:bundle-diff` writes one JSON file and does not copy either directory. `mvn apiversa:pact` writes nothing when the input is missing. A gateway URL map is used only when the host passes one.
 
 ## node 1.7.0 (unreleased)
 
 - SHR-07 Bundle diff
 - TEST-09 Pact file
-- Migration: none. `apiversa bundle-diff` writes one JSON file and does not copy either directory. `apiversa pact` writes nothing when the input is missing.
+- GW-03 Upstream per bundle
+- Migration: none. `apiversa bundle-diff` writes one JSON file and does not copy either directory. `apiversa pact` writes nothing when the input is missing. A gateway URL map is used only when the host passes one.
 
 ## spring 1.6.0 (unreleased)
 
