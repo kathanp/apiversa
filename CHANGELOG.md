@@ -2,6 +2,16 @@
 
 One section per track and version, newest version first. Node and Spring are interleaved by version number. The agent adds one line per finished roadmap ID while building (`- <ID> <title>`). A release renames `(unreleased)` to the release date. Each section has a migration line (`docs/STABILITY.md`).
 
+## spring 1.7.0 (unreleased)
+
+- SHR-07 Bundle diff
+- Migration: none. `mvn apiversa:bundle-diff` writes one JSON file and does not copy either directory.
+
+## node 1.7.0 (unreleased)
+
+- SHR-07 Bundle diff
+- Migration: none. `apiversa bundle-diff` writes one JSON file and does not copy either directory.
+
 ## spring 1.6.0 (unreleased)
 
 - CLIENT-05 Python client files
