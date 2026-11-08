@@ -2,6 +2,16 @@
 
 One section per track and version, newest version first. Node and Spring are interleaved by version number. The agent adds one line per finished roadmap ID while building (`- <ID> <title>`). A release renames `(unreleased)` to the release date. Each section has a migration line (`docs/STABILITY.md`).
 
+## spring 1.6.0 (unreleased)
+
+- CLIENT-05 Python client files
+- Migration: none. `mvn apiversa:generate-client` still writes the Java record. `-Dapiversa.lang=python` writes a class file.
+
+## node 1.6.0 (unreleased)
+
+- CLIENT-05 Python client files
+- Migration: none. `apiversa generate` is unchanged. `apiversa generate-client` writes the Java record unless `--lang python` is set.
+
 ## spring 1.5.0 (unreleased)
 
 - CORE-33 Field join

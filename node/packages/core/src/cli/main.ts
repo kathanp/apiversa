@@ -17,6 +17,11 @@ import { writeMatrix } from './matrix.js';
 import { replay } from './replay.js';
 import { retire } from './retire.js';
 import { typeDiff } from './typeDiff.js';
+import { writeAsyncApi } from './asyncapi.js';
+import { writeClientFiles, type ClientLang } from './clients.js';
+import { writeCompat } from './compat.js';
+import { rewriteFailure, rewriteJsonl } from './rewrite.js';
+import { writeSnippets } from './snippets.js';
 import { upgradeGuide } from './upgradeGuide.js';
 
 /** `apiversa init|lock|doctor|generate|check|test|openapi|changelog|eject|upgrade-guide`. Returns the process status. */
@@ -157,6 +162,54 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
     process.stdout.write(`wrote ${written}\n`);
     return 0;
   }
+  if (command === 'snippets') {
+    const version = flag(rest, '--version');
+    if (!version) {
+      process.stderr.write('usage: apiversa snippets --version YYYY-MM-DD [--header name]\n');
+      return 1;
+    }
+    for (const file of writeSnippets(cwd, version, flag(rest, '--header') ?? 'Api-Version')) process.stdout.write(`wrote ${file}\n`);
+    return 0;
+  }
+  if (command === 'rewrite') {
+    const schema = flag(rest, '--schema');
+    const direction = flag(rest, '--direction');
+    const version = flag(rest, '--version');
+    const input = flag(rest, '--in');
+    const out = flag(rest, '--out');
+    if (!schema || (direction !== 'up' && direction !== 'down') || !version || !input || !out) {
+      process.stderr.write('usage: apiversa rewrite --schema Name --direction up|down --version YYYY-MM-DD --in file --out file [api-versions]\n');
+      return 1;
+    }
+    const result = rewriteJsonl(dir, { schema, direction, version, input, out });
+    if (!result.ok) {
+      process.stderr.write(`${rewriteFailure(result)}\n`);
+      return 1;
+    }
+    return 0;
+  }
+  if (command === 'asyncapi') {
+    const result = writeAsyncApi(dir);
+    if (!result.ok) {
+      process.stderr.write(`${result.code}\n`);
+      return 1;
+    }
+    for (const file of result.files) process.stdout.write(`wrote ${file}\n`);
+    return 0;
+  }
+  if (command === 'generate-client') {
+    const lang = flag(rest, '--lang') ?? 'java';
+    if (lang !== 'java' && lang !== 'python') {
+      process.stderr.write('usage: apiversa generate-client [--lang java|python] [api-versions]\n');
+      return 1;
+    }
+    for (const file of writeClientFiles(dir, lang as ClientLang)) process.stdout.write(`wrote ${file}\n`);
+    return 0;
+  }
+  if (command === 'compat') {
+    process.stdout.write(`wrote ${writeCompat(dir, flag(rest, '--out'), undefined, cwd)}\n`);
+    return 0;
+  }
   if (command === 'upgrade-guide') {
     const from = flag(rest, '--from');
     if (!from) {
@@ -183,7 +236,7 @@ function flag(rest: string[], name: string): string | undefined {
 
 function positional(rest: string[]): string | undefined {
   const skip = new Set<number>();
-  for (const name of ['--format', '--from', '--out', '--version', '--route', '--samples', '--schema', '--to', '--body']) {
+  for (const name of ['--format', '--from', '--out', '--version', '--route', '--samples', '--schema', '--to', '--body', '--in', '--direction', '--lang', '--left', '--right']) {
     const index = rest.indexOf(name);
     if (index >= 0) skip.add(index + 1);
   }

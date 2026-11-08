@@ -55,12 +55,33 @@ function applyOlder(schemas: Record<string, HeadField[]>, op: RawOp): void {
     if (index >= 0) fields.splice(index, 1);
   } else if (op.op === 'field.remove' && simple(op.path)) {
     if (!fields.some((field) => field.name === op.path)) fields.push({ name: op.path, type: 'unknown' });
-  } else if ((op.op === 'field.rename' || op.op === 'field.move') && simple(op.from) && simple(op.to)) {
+  } else if (op.op === 'field.copy' && simple(op.to)) {
+    const index = fields.findIndex((field) => field.name === op.to);
+    if (index >= 0) fields.splice(index, 1);
+  } else if ((op.op === 'field.rename' || op.op === 'field.move' || op.op === 'field.alias') && simple(op.from) && simple(op.to)) {
     const field = fields.find((item) => item.name === op.to);
     if (field) field.name = op.from!;
   } else if (op.op === 'field.type' && simple(op.path)) {
     const field = fields.find((item) => item.name === op.path);
     if (field) field.type = 'unknown';
+  } else if (op.op === 'field.join' && simple(op.from) && simple(op.left) && simple(op.right)) {
+    const index = fields.findIndex((field) => field.name === op.from);
+    const left = { name: op.left, type: 'string' };
+    const right = { name: op.right, type: 'string' };
+    if (index >= 0) fields.splice(index, 1, left, right);
+    else {
+      if (!fields.some((field) => field.name === op.left)) fields.push(left);
+      if (!fields.some((field) => field.name === op.right)) fields.push(right);
+    }
+  } else if (op.op === 'field.list' && simple(op.from) && simple(op.to)) {
+    const field = fields.find((item) => item.name === op.to);
+    if (field) {
+      field.name = op.from;
+      if (field.type === 'array' || field.type === 'list') field.type = 'string';
+    }
+  } else if (op.op === 'field.null' && simple(op.path)) {
+    const index = fields.findIndex((field) => field.name === op.path);
+    if (index >= 0) fields.splice(index, 1);
   }
 }
 
