@@ -1,0 +1,8 @@
+{
+  "schema": "Person",
+  "fields": ["name"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "input": { "left": "Ada", "right": "Lovelace" },
+  "expected": { "name": "Ada Lovelace" }
+}

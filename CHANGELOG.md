@@ -2,10 +2,27 @@
 
 One section per track and version, newest version first. Node and Spring are interleaved by version number. The agent adds one line per finished roadmap ID while building (`- <ID> <title>`). A release renames `(unreleased)` to the release date. Each section has a migration line (`docs/STABILITY.md`).
 
+## spring 1.5.0 (unreleased)
+
+- CORE-33 Field join
+- Migration: none. `field.join`, `field.list`, and `field.null` are new ops. Existing change files are unchanged.
+
+## node 1.5.0 (unreleased)
+
+- CORE-33 Field join
+- Migration: none. `field.join` is a new op. A change file that uses it fails startup until this version.
+
 ## node 0.22.0 (unreleased)
 
 - FW-03 NestJS adapter
 - Migration: none. The same module runs on Nest 10 and Nest 11, with Express and Fastify. Nest 10 is installed outside the workspace in `nest10-check/` so it does not replace Nest 11.
+- Migration: `AV-E012` now says the version is older than the oldest supported version or past its sunset. `AV-E008` stays HTTP 413 on the way down. No package version change.
+
+## spring 0.17.0 (unreleased)
+
+- Migration: `examples/spring-native` with `-Pnative` runs Spring test AOT, builds the `spring-native` image, and runs the native test. A normal `mvn test` does not build an image.
+- Migration: `AV-E012` now says the version is older than the oldest supported version or past its sunset. `AV-E008` stays HTTP 413 on the way down. No package version change.
+- Known gap: the image and native test passed locally on GraalVM 21.0.12. CI does not run `-Pnative`, and workflow files are protected, so SPR-11 stays unchecked (D-58).
 
 ## spring 0.16.0 (unreleased)
 
@@ -14,7 +31,7 @@ One section per track and version, newest version first. Node and Spring are int
 - CORE-10 Released versions are frozen
 - CORE-14 Form bodies
 - Migration: a `prod` or `production` profile now fails startup with `AV-E006` when `.lock.json` does not match the change files. `mvn apiversa:check` fails when `head.json` differs from the newest `snapshots/*.json` and no non-draft change file covers that diff. Framework 7 apps depend on `apiversa-spring-framework7`, which delegates `ApiVersionResolver` to `Engine.resolve`. Boot 3.3 keeps its own resolver. A repeated form key is `AV-E015`.
-- Known gap: the native image was not built, so SPR-11 moves to spring 0.17.0 and stays unchecked (D-56).
+- Known gap: SPR-11 is spring 0.17.0. The image was not part of this version (D-56).
 
 ## node 0.21.0 (unreleased)
 

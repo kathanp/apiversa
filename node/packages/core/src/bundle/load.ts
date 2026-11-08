@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertReleasedLock } from '../cli/lock.js';
 import { fail } from '../errors.js';
+import { checkSeparator } from '../ops/fieldSplit.js';
 import type { Registry } from '../json/parse.js';
 import { DEFAULT_LIMITS, type Limits } from '../limits.js';
 import { opRuns, type Change, type Converter, type PinStore, type RawOp } from '../model.js';
@@ -105,6 +106,7 @@ export function buildBundle(
       if ((op.op === 'endpoint.method' || op.op === 'param.move' || op.op === 'endpoint.deprecate' || op.op === 'response.envelope') && `${op.path ?? ''}`.includes('{')) {
         throw fail('AV-E001', 'startup', 'route patterns use :param');
       }
+      if (op.op === 'field.split' || op.op === 'field.join') checkSeparator(op.separator);
       checkScope(op);
     }
     changes.push({ version: file.version, id: file.id, description: file.description, ops: file.changes });

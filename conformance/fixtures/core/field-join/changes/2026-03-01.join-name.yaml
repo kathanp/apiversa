@@ -1,0 +1,10 @@
+version: "2026-03-01"
+id: join-name
+description: "left and right became name."
+changes:
+  - op: field.join
+    schema: Person
+    from: name
+    left: left
+    right: right
+    separator: " "

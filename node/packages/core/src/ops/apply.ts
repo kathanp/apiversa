@@ -12,6 +12,10 @@ import { errorShape } from './errorShape.js';
 import { fieldAdd } from './fieldAdd.js';
 import { fieldMove } from './fieldMove.js';
 import { fieldRemove } from './fieldRemove.js';
+import { fieldAlias } from './fieldAlias.js';
+import { fieldCopy } from './fieldCopy.js';
+import { fieldJoin } from './fieldJoin.js';
+import { fieldSplit } from './fieldSplit.js';
 import { fieldRename } from './fieldRename.js';
 import { fieldType } from './fieldType.js';
 import { linkRewrite } from './linkRewrite.js';
@@ -72,6 +76,18 @@ function applyOnObject(obj: JObject, schema: string | undefined, op: RawOp, ctx:
   switch (op.op) {
     case 'field.rename':
       fieldRename(obj, op, ctx.when);
+      return obj;
+    case 'field.alias':
+      fieldAlias(obj, op, ctx.when);
+      return obj;
+    case 'field.split':
+      fieldSplit(obj, op, ctx.when);
+      return obj;
+    case 'field.join':
+      fieldJoin(obj, op, ctx.when);
+      return obj;
+    case 'field.copy':
+      fieldCopy(obj, op, ctx.when);
       return obj;
     case 'field.add':
       fieldAdd(obj, op, ctx.when);

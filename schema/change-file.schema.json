@@ -161,6 +161,126 @@
         {
           "properties": {
             "op": {
+              "const": "field.alias"
+            },
+            "schema": {
+              "$ref": "#/$defs/name"
+            },
+            "from": {
+              "$ref": "#/$defs/path"
+            },
+            "to": {
+              "$ref": "#/$defs/path"
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            }
+          },
+          "required": [
+            "schema",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "field.split"
+            },
+            "schema": {
+              "$ref": "#/$defs/name"
+            },
+            "from": {
+              "$ref": "#/$defs/path"
+            },
+            "left": {
+              "$ref": "#/$defs/path"
+            },
+            "right": {
+              "$ref": "#/$defs/path"
+            },
+            "separator": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            }
+          },
+          "required": [
+            "schema",
+            "from",
+            "left",
+            "right",
+            "separator"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "field.join"
+            },
+            "schema": {
+              "$ref": "#/$defs/name"
+            },
+            "from": {
+              "$ref": "#/$defs/path"
+            },
+            "left": {
+              "$ref": "#/$defs/path"
+            },
+            "right": {
+              "$ref": "#/$defs/path"
+            },
+            "separator": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            }
+          },
+          "required": [
+            "schema",
+            "from",
+            "left",
+            "right",
+            "separator"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "field.copy"
+            },
+            "schema": {
+              "$ref": "#/$defs/name"
+            },
+            "from": {
+              "$ref": "#/$defs/path"
+            },
+            "to": {
+              "$ref": "#/$defs/path"
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            }
+          },
+          "required": [
+            "schema",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": {
               "const": "field.add"
             },
             "schema": {

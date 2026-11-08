@@ -26,6 +26,9 @@ export type RawOp = {
   items?: string;
   cursorHeader?: string;
   target?: string;
+  left?: string;
+  right?: string;
+  separator?: string;
   prefix?: string;
   numeric?: boolean;
   scope?: { routes?: string[]; on?: 'request' | 'response' };
@@ -53,6 +56,10 @@ export type HeaderPair = { name: string; value: string };
 
 export const DATA_OPS: ReadonlySet<string> = new Set([
   'field.rename',
+  'field.alias',
+  'field.split',
+  'field.join',
+  'field.copy',
   'field.add',
   'field.remove',
   'field.move',

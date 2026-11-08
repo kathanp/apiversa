@@ -134,6 +134,7 @@ public final class Engine {
                 if (("header.add".equals(opName) || "header.remove".equals(opName)) && op.get("name") != null && String.valueOf(op.get("name")).equalsIgnoreCase("Api-Version")) throw ApiversaException.fail("AV-E001", "startup");
                 if ("link.rewrite".equals(opName) && (String.valueOf(op.get("from")) + String.valueOf(op.get("to"))).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
                 if (("endpoint.method".equals(opName) || "param.move".equals(opName) || "endpoint.deprecate".equals(opName) || "response.envelope".equals(opName)) && String.valueOf(op.get("path")).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
+                if ("field.split".equals(opName) || "field.join".equals(opName)) checkSeparator(op.get("separator"));
                 checkScope(op);
                 ops.add(op);
             }
@@ -169,7 +170,17 @@ public final class Engine {
         return steps;
     }
 
+    /** Host logger hook. {@code change} is {@code version.id}. DBG-03. */
+    @FunctionalInterface
+    public interface ConvertListener {
+        void onConvert(String change, String direction, long ms);
+    }
+
     public static Result execute(Bundle bundle, Request request, String direction) {
+        return execute(bundle, request, direction, null);
+    }
+
+    public static Result execute(Bundle bundle, Request request, String direction, @Nullable ConvertListener listener) {
         String path = request.path == null ? "" : request.path;
         String methodNow = request.method;
         String legacy = null;
@@ -208,35 +219,64 @@ public final class Engine {
             V current = json;
             for (Step step : steps) {
                 String name = String.valueOf(step.op.get("op"));
+                long started = listener == null ? 0L : System.nanoTime();
+                boolean ran = false;
                 if ("response.envelope".equals(name) || "value.prefix".equals(name)) {
                     Routed routed = routeOp(current, step.op, direction, request, path, query, headers, bundle.changes);
                     current = routed.body == null ? current : routed.body;
                     path = routed.path;
                     query = routed.query;
+                    ran = true;
                 } else if (bodyOp(step.op) && applies(bundle.registry, request.schema, step.op.get("schema") == null ? null : String.valueOf(step.op.get("schema")))) {
                     if ("error.shape".equals(name)) {
-                        if (request.isError || (status != null && status >= 400)) current = apply(current, request.schema, step.op, direction, bundle, request, status, 0);
+                        if (request.isError || (status != null && status >= 400)) {
+                            current = apply(current, request.schema, step.op, direction, bundle, request, status, 0);
+                            ran = true;
+                        }
                     } else if (!request.isError && !(status != null && status >= 400 && "down".equals(direction))) {
                         current = apply(current, request.schema, step.op, direction, bundle, request, status, 0);
+                        ran = true;
                     }
-                } else if (name.startsWith("query.")) query = queryOp(query, step.op, direction);
-                else if (name.startsWith("header.")) headers = headerOp(headers, step.op, direction);
-                else if ("status.change".equals(name)) status = statusChange(status, step.op, direction);
-                else if ("param.move".equals(name)) path = paramMove(step.op, direction, request, methodNow, path, query, headers, body, bundle.changes);
+                } else if (name.startsWith("query.")) {
+                    query = queryOp(query, step.op, direction);
+                    ran = true;
+                } else if (name.startsWith("header.")) {
+                    headers = headerOp(headers, step.op, direction);
+                    ran = true;
+                } else if ("status.change".equals(name)) {
+                    status = statusChange(status, step.op, direction);
+                    ran = true;
+                } else if ("param.move".equals(name)) {
+                    path = paramMove(step.op, direction, request, methodNow, path, query, headers, body, bundle.changes);
+                    ran = true;
+                }
+                if (ran && listener != null) listener.onConvert(step.version + "." + step.id, direction, (System.nanoTime() - started) / 1_000_000L);
             }
             body = materialize(current, request.schema, bundle.registry);
         } else {
             for (Step step : steps) {
                 String name = String.valueOf(step.op.get("op"));
-                if (name.startsWith("query.")) query = queryOp(query, step.op, direction);
-                else if (name.startsWith("header.")) headers = headerOp(headers, step.op, direction);
-                else if ("status.change".equals(name)) status = statusChange(status, step.op, direction);
-                else if ("param.move".equals(name)) path = paramMove(step.op, direction, request, methodNow, path, query, headers, body, bundle.changes);
-                else if ("value.prefix".equals(name)) {
+                long started = listener == null ? 0L : System.nanoTime();
+                boolean ran = false;
+                if (name.startsWith("query.")) {
+                    query = queryOp(query, step.op, direction);
+                    ran = true;
+                } else if (name.startsWith("header.")) {
+                    headers = headerOp(headers, step.op, direction);
+                    ran = true;
+                } else if ("status.change".equals(name)) {
+                    status = statusChange(status, step.op, direction);
+                    ran = true;
+                } else if ("param.move".equals(name)) {
+                    path = paramMove(step.op, direction, request, methodNow, path, query, headers, body, bundle.changes);
+                    ran = true;
+                } else if ("value.prefix".equals(name) || "response.envelope".equals(name)) {
                     Routed routed = routeOp(null, step.op, direction, request, path, query, headers, bundle.changes);
                     path = routed.path;
                     query = routed.query;
+                    ran = true;
                 }
+                if (ran && listener != null) listener.onConvert(step.version + "." + step.id, direction, (System.nanoTime() - started) / 1_000_000L);
             }
         }
         return finish(request, direction, steps, body, path, query, headers, status, legacy, parsed, methodNow);
@@ -421,7 +461,7 @@ public final class Engine {
                 Object declared = op.get("schema");
                 if (declared != null && schema != null && !schema.equals(String.valueOf(declared))) continue;
                 String kind = String.valueOf(op.get("op"));
-                if ("field.rename".equals(kind) || "field.move".equals(kind)) path = replacePath(path, String.valueOf(op.get("to")), String.valueOf(op.get("from")));
+                if ("field.rename".equals(kind) || "field.move".equals(kind) || "field.alias".equals(kind)) path = replacePath(path, String.valueOf(op.get("to")), String.valueOf(op.get("from")));
                 else if ("field.add".equals(kind) && covers(path, String.valueOf(op.get("path")))) introduced = true;
             }
         }
@@ -489,15 +529,34 @@ public final class Engine {
         return resolveDecision(bundle, headers, headerName, resolved, clientId).version();
     }
 
-    /** The date that won, and which rule selected it. */
+    /** The date that won, and which rule selected it. Header, then resolver, then the longest legacy prefix. */
     public static Decision resolveDecision(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId) {
+        return resolveDecision(bundle, headers, headerName, resolved, clientId, null, null);
+    }
+
+    public static Decision resolveDecision(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId, @Nullable String path, @Nullable Map<String, String> legacyPrefixes) {
         String name = headerName == null || headerName.isBlank() ? "Api-Version" : headerName;
         List<String> values = readHeader(headers, name);
         List<String> distinct = values.stream().distinct().toList();
         if (distinct.size() > 1) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
         if (!distinct.isEmpty()) return new Decision(classify(bundle, distinct.get(0), name), "header");
         if (resolved != null && !resolved.isEmpty()) return new Decision(classify(bundle, resolved, name), "resolver");
+        String fromPrefix = prefixVersion(path, legacyPrefixes);
+        if (fromPrefix != null) return new Decision(classify(bundle, fromPrefix, name), "prefix");
         return applyDefault(bundle, clientId, name);
+    }
+
+    /** Longest prefix wins. A prefix matches the path or a path under it. */
+    public static String prefixVersion(@Nullable String path, @Nullable Map<String, String> prefixes) {
+        if (path == null || path.isEmpty() || prefixes == null || prefixes.isEmpty()) return null;
+        String pathname = path.split("\\?", 2)[0];
+        List<String> keys = new ArrayList<>(prefixes.keySet());
+        keys.sort((left, right) -> Integer.compare(right.length(), left.length()));
+        for (String prefix : keys) {
+            String root = prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix;
+            if (pathname.equals(root) || pathname.startsWith(root + "/")) return prefixes.get(prefix);
+        }
+        return null;
     }
 
     /** Echo the resolved date. `Apiversa-Default` is set only when the default policy chose it. */
@@ -768,6 +827,10 @@ public final class Engine {
     private static V onObject(Obj obj, Map<String, Object> op, String direction, Bundle bundle, String schema) {
         switch (String.valueOf(op.get("op"))) {
             case "field.rename", "field.move" -> rename(obj, text(op, "up".equals(direction) ? "from" : "to"), text(op, "up".equals(direction) ? "to" : "from"), direction);
+            case "field.alias" -> alias(obj, text(op, "from"), text(op, "to"), direction);
+            case "field.split" -> split(obj, text(op, "from"), text(op, "left"), text(op, "right"), text(op, "separator"), direction);
+            case "field.join" -> join(obj, text(op, "from"), text(op, "left"), text(op, "right"), text(op, "separator"), direction);
+            case "field.copy" -> copy(obj, text(op, "from"), text(op, "to"), direction);
             case "field.add" -> add(obj, text(op, "path"), op.get("default"), direction);
             case "field.remove" -> remove(obj, text(op, "path"), op.get("default"), direction);
             case "field.type" -> type(obj, text(op, "path"), "down".equals(direction) ? op.get("down") : op.get("up"), direction);
@@ -865,6 +928,148 @@ public final class Engine {
                 dest.get(i).parent.set(dest.get(i).key, Json.clone(value));
             }
         }
+    }
+
+    /** Up accepts either name. Both names on the way up are AV-E018. Down keeps `from` and drops `to`. */
+    private static void alias(Obj root, String from, String to, String when) {
+        List<Leaf> fromLeaves = leaves(root, from, when);
+        List<Leaf> toLeaves = leaves(root, to, when);
+        int count = Math.max(fromLeaves.size(), toLeaves.size());
+        if ("up".equals(when)) {
+            for (int i = 0; i < count; i++) {
+                if (present(fromLeaves, i) && present(toLeaves, i)) throw ApiversaException.fail("AV-E018", "up");
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            boolean fromPresent = present(fromLeaves, i);
+            boolean toPresent = present(toLeaves, i);
+            if ("up".equals(when)) {
+                if (!fromPresent || toPresent) continue;
+                Leaf src = fromLeaves.get(i);
+                Leaf dest = i < toLeaves.size() ? toLeaves.get(i) : null;
+                if (dest == null) throw ApiversaException.fail("AV-E016", when);
+                V value = src.parent.values.get(src.key);
+                src.parent.remove(src.key);
+                dest.parent.set(dest.key, value == null ? Json.Null.INSTANCE : Json.clone(value));
+            } else if (toPresent) {
+                Leaf dest = toLeaves.get(i);
+                if (!fromPresent) {
+                    Leaf src = i < fromLeaves.size() ? fromLeaves.get(i) : null;
+                    if (src == null) throw ApiversaException.fail("AV-E016", when);
+                    V value = dest.parent.values.get(dest.key);
+                    src.parent.set(src.key, value == null ? Json.Null.INSTANCE : Json.clone(value));
+                }
+                dest.parent.remove(dest.key);
+            }
+        }
+    }
+
+    /** Up removes an equal `to`. Down copies `from` onto an absent `to`. `from` stays. */
+    private static void copy(Obj root, String from, String to, String when) {
+        List<Leaf> fromLeaves = leaves(root, from, when);
+        List<Leaf> toLeaves = leaves(root, to, when);
+        int count = Math.max(fromLeaves.size(), toLeaves.size());
+        for (int i = 0; i < count; i++) {
+            if ("up".equals(when)) copyUp(fromLeaves, toLeaves, i, when);
+            else copyDown(fromLeaves, toLeaves, i, when);
+        }
+    }
+
+    private static void copyUp(List<Leaf> fromLeaves, List<Leaf> toLeaves, int index, String when) {
+        if (!present(toLeaves, index)) return;
+        if (!present(fromLeaves, index) || !Json.same(read(fromLeaves.get(index)), read(toLeaves.get(index)))) throw ApiversaException.fail("AV-E020", when);
+        Leaf dest = toLeaves.get(index);
+        dest.parent.remove(dest.key);
+    }
+
+    private static void copyDown(List<Leaf> fromLeaves, List<Leaf> toLeaves, int index, String when) {
+        if (!present(fromLeaves, index)) return;
+        if (index >= toLeaves.size()) throw ApiversaException.fail("AV-E016", when);
+        Leaf dest = toLeaves.get(index);
+        V source = read(fromLeaves.get(index));
+        if (!present(toLeaves, index)) {
+            dest.parent.set(dest.key, Json.clone(source));
+            return;
+        }
+        if (!Json.same(source, read(dest))) throw ApiversaException.fail("AV-E020", when);
+    }
+
+    private static V read(Leaf leaf) {
+        V value = leaf.parent.values.get(leaf.key);
+        return value == null ? Json.Null.INSTANCE : value;
+    }
+
+    private static boolean present(List<Leaf> leaves, int index) {
+        return index < leaves.size() && leaves.get(index).exists;
+    }
+
+    /** A separator is a literal string of 1 to 32 characters. A regex literal is rejected. */
+    static void checkSeparator(Object separator) {
+        String value = separator instanceof String text ? text : "";
+        if (value.isEmpty() || value.length() > 32 || regexLiteral(value)) throw ApiversaException.fail("AV-E001", "startup");
+    }
+
+    private static boolean regexLiteral(String value) {
+        if (!value.startsWith("/") || value.length() < 3) return false;
+        int end = value.lastIndexOf('/');
+        if (end <= 0) return false;
+        for (int i = end + 1; i < value.length(); i++) if ("gimsuy".indexOf(value.charAt(i)) < 0) return false;
+        return true;
+    }
+
+    /** Up joins the two sides. Down splits on the first literal separator. */
+    private static void join(Obj root, String from, String left, String right, String separator, String when) {
+        checkSeparator(separator);
+        List<Leaf> fromLeaves = leaves(root, from, when);
+        List<Leaf> leftLeaves = leaves(root, left, when);
+        List<Leaf> rightLeaves = leaves(root, right, when);
+        int count = Math.max(fromLeaves.size(), Math.max(leftLeaves.size(), rightLeaves.size()));
+        for (int i = 0; i < count; i++) {
+            if ("up".equals(when)) splitDown(fromLeaves, leftLeaves, rightLeaves, i, separator, when);
+            else splitUp(fromLeaves, leftLeaves, rightLeaves, i, separator, when);
+        }
+    }
+
+    /** Up splits on the first literal separator. Down joins the two sides. */
+    private static void split(Obj root, String from, String left, String right, String separator, String when) {
+        checkSeparator(separator);
+        List<Leaf> fromLeaves = leaves(root, from, when);
+        List<Leaf> leftLeaves = leaves(root, left, when);
+        List<Leaf> rightLeaves = leaves(root, right, when);
+        int count = Math.max(fromLeaves.size(), Math.max(leftLeaves.size(), rightLeaves.size()));
+        for (int i = 0; i < count; i++) {
+            if ("up".equals(when)) splitUp(fromLeaves, leftLeaves, rightLeaves, i, separator, when);
+            else splitDown(fromLeaves, leftLeaves, rightLeaves, i, separator, when);
+        }
+    }
+
+    private static void splitUp(List<Leaf> fromLeaves, List<Leaf> leftLeaves, List<Leaf> rightLeaves, int index, String separator, String when) {
+        if (present(leftLeaves, index) || present(rightLeaves, index)) throw ApiversaException.fail("AV-E020", when);
+        if (!present(fromLeaves, index)) return;
+        Leaf src = fromLeaves.get(index);
+        String value = requireString(src, "AV-E016", when);
+        int at = value.indexOf(separator);
+        if (at < 0) throw ApiversaException.fail("AV-E021", when);
+        if (index >= leftLeaves.size() || index >= rightLeaves.size()) throw ApiversaException.fail("AV-E016", when);
+        leftLeaves.get(index).parent.set(leftLeaves.get(index).key, new Json.Str(value.substring(0, at)));
+        rightLeaves.get(index).parent.set(rightLeaves.get(index).key, new Json.Str(value.substring(at + separator.length())));
+        src.parent.remove(src.key);
+    }
+
+    private static void splitDown(List<Leaf> fromLeaves, List<Leaf> leftLeaves, List<Leaf> rightLeaves, int index, String separator, String when) {
+        if (present(fromLeaves, index)) throw ApiversaException.fail("AV-E020", when);
+        if (!present(leftLeaves, index) || !present(rightLeaves, index)) throw ApiversaException.fail("AV-E021", when);
+        String joined = requireString(leftLeaves.get(index), "AV-E021", when) + separator + requireString(rightLeaves.get(index), "AV-E021", when);
+        if (index >= fromLeaves.size()) throw ApiversaException.fail("AV-E016", when);
+        fromLeaves.get(index).parent.set(fromLeaves.get(index).key, new Json.Str(joined));
+        leftLeaves.get(index).parent.remove(leftLeaves.get(index).key);
+        rightLeaves.get(index).parent.remove(rightLeaves.get(index).key);
+    }
+
+    private static String requireString(Leaf leaf, String code, String when) {
+        V value = leaf.parent.values.get(leaf.key);
+        if (value instanceof Json.Str str) return str.value();
+        throw ApiversaException.fail(code, when);
     }
 
     private static boolean sameParent(String leftPath, String rightPath) {
