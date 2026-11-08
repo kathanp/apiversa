@@ -4,7 +4,7 @@ import { loadBundle } from '../bundle/load.js';
 import { ApiversaError } from '../errors.js';
 import { schemaFieldsAt, type HeadField } from './generate.js';
 
-export type ClientLang = 'java' | 'python';
+export type ClientLang = 'java' | 'python' | 'go';
 
 /** One source file per schema per date. `java` is the CLIENT-03 record. */
 export function clientSources(dir: string, lang: ClientLang, today?: string, pkg = 'apiversa.client.generated'): { name: string; text: string }[] {
@@ -17,6 +17,7 @@ export function clientSources(dir: string, lang: ClientLang, today?: string, pkg
     for (const [schema, fields] of Object.entries(shapes)) {
       const type = `${schema}_${date.replaceAll('-', '_')}`;
       if (lang === 'python') files.push({ name: `${type}.py`, text: pythonFile(type, fields, date, names) });
+      else if (lang === 'go') files.push({ name: `${type}.go`, text: goFile(type, fields, date, names) });
       else files.push({ name: `${type}.java`, text: javaFile(pkg, type, fields) });
     }
   }
@@ -25,7 +26,7 @@ export function clientSources(dir: string, lang: ClientLang, today?: string, pkg
 
 /** Write `generated/` for one language. Omitting the language is Java. */
 export function writeClientFiles(dir: string, lang: ClientLang = 'java', today?: string, pkg = 'apiversa.client.generated'): string[] {
-  if (lang !== 'java' && lang !== 'python') throw new ApiversaError('AV-E001', 'startup');
+  if (lang !== 'java' && lang !== 'python' && lang !== 'go') throw new ApiversaError('AV-E001', 'startup');
   const outDir = join(dir, 'generated');
   mkdirSync(outDir, { recursive: true });
   return clientSources(dir, lang, today, pkg).map((file) => {
@@ -55,6 +56,22 @@ function pythonType(type: string | undefined, date: string, names: Set<string>):
   if (type === 'array' || type === 'list') return 'list';
   if (type && names.has(type)) return `${type}_${date.replaceAll('-', '_')}`;
   return 'str';
+}
+
+function goFile(type: string, fields: HeadField[], date: string, names: Set<string>): string {
+  const lines = ['package generated', '', `type ${type} struct {`];
+  for (const field of fields) lines.push(`\t${field.name} ${goType(field.type, date, names)} \`json:"${field.name}"\``);
+  lines.push('}');
+  return `${lines.join('\n')}\n`;
+}
+
+function goType(type: string | undefined, date: string, names: Set<string>): string {
+  if (type === 'boolean') return 'bool';
+  if (type === 'integer') return 'int64';
+  if (type === 'number') return 'float64';
+  if (type === 'array' || type === 'list') return '[]string';
+  if (type && names.has(type)) return `${type}_${date.replaceAll('-', '_')}`;
+  return 'string';
 }
 
 function javaFile(pkg: string, type: string, fields: HeadField[]): string {

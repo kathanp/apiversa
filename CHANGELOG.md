@@ -5,12 +5,14 @@ One section per track and version, newest version first. Node and Spring are int
 ## spring 1.6.0 (unreleased)
 
 - CLIENT-05 Python client files
-- Migration: none. `mvn apiversa:generate-client` still writes the Java record. `-Dapiversa.lang=python` writes a class file.
+- CLIENT-06 Go client files
+- Migration: none. `mvn apiversa:generate-client` still writes the Java record. `-Dapiversa.lang=python` writes a class file. `-Dapiversa.lang=go` writes a struct file.
 
 ## node 1.6.0 (unreleased)
 
 - CLIENT-05 Python client files
-- Migration: none. `apiversa generate` is unchanged. `apiversa generate-client` writes the Java record unless `--lang python` is set.
+- CLIENT-06 Go client files
+- Migration: none. `apiversa generate` is unchanged. `apiversa generate-client` writes the Java record unless `--lang python` or `--lang go` is set.
 
 ## spring 1.5.0 (unreleased)
 

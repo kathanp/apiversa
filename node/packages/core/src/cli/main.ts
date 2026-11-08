@@ -199,8 +199,8 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
   }
   if (command === 'generate-client') {
     const lang = flag(rest, '--lang') ?? 'java';
-    if (lang !== 'java' && lang !== 'python') {
-      process.stderr.write('usage: apiversa generate-client [--lang java|python] [api-versions]\n');
+    if (lang !== 'java' && lang !== 'python' && lang !== 'go') {
+      process.stderr.write('usage: apiversa generate-client [--lang java|python|go] [api-versions]\n');
       return 1;
     }
     for (const file of writeClientFiles(dir, lang as ClientLang)) process.stdout.write(`wrote ${file}\n`);
