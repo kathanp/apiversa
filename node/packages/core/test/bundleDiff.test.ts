@@ -18,7 +18,7 @@ describe('SHR-07 bundle diff', () => {
   it('SHR-07 refuses copying either directory', () => {
     const left = side('2026-04-01', '2026-03-01.old.yaml', 'old-name');
     const right = side('2026-02-01', '2026-03-01.new.yaml', 'new-name');
-    const out = join(tmpdir(), `apiversa-diff-${Date.now()}.json`);
+    const out = join(mkdtempSync(join(tmpdir(), 'apiversa-diff-out-')), 'bundle-diff.json');
     expect(runCli(['node', 'apiversa', 'bundle-diff', '--left', left, '--right', right, '--out', out])).toBe(0);
     expect(readdirSync(left).some((name) => name === '2026-03-01.new.yaml')).toBe(false);
     expect(readdirSync(right).some((name) => name === '2026-03-01.old.yaml')).toBe(false);
