@@ -16,19 +16,34 @@ import org.springframework.web.accept.ApiVersionResolver;
 public final class ApiversaApiVersionResolver implements ApiVersionResolver {
     private final Engine.Bundle bundle;
     private final String header;
+    private final java.util.Map<String, String> legacyPrefixes;
+    private final boolean mediaType;
+    private final String queryVersion;
 
     public ApiversaApiVersionResolver(Engine.Bundle bundle) {
         this(bundle, "Api-Version");
     }
 
     public ApiversaApiVersionResolver(Engine.Bundle bundle, String header) {
+        this(bundle, header, null);
+    }
+
+    public ApiversaApiVersionResolver(Engine.Bundle bundle, String header, java.util.Map<String, String> legacyPrefixes) {
+        this(bundle, header, legacyPrefixes, false, null);
+    }
+
+    public ApiversaApiVersionResolver(Engine.Bundle bundle, String header, java.util.Map<String, String> legacyPrefixes, boolean mediaType, String queryVersion) {
         this.bundle = bundle;
         this.header = header == null || header.isBlank() ? "Api-Version" : header;
+        this.legacyPrefixes = legacyPrefixes;
+        this.mediaType = mediaType;
+        this.queryVersion = queryVersion;
     }
 
     @Override
     public String resolveVersion(HttpServletRequest request) {
-        return Engine.resolve(bundle, headers(request), header, null, null);
+        String uri = request.getRequestURI() == null ? "" : request.getRequestURI();
+        return Engine.resolveDecision(bundle, headers(request), header, null, null, uri, legacyPrefixes, mediaType, queryVersion, request.getQueryString()).version();
     }
 
     private static Map<String, List<String>> headers(HttpServletRequest request) {

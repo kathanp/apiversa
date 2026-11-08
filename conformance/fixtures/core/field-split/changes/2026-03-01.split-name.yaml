@@ -1,0 +1,10 @@
+version: "2026-03-01"
+id: split-name
+description: "name split into left and right."
+changes:
+  - op: field.split
+    schema: Person
+    from: name
+    left: left
+    right: right
+    separator: " "

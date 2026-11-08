@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { ApiversaError, convertForm, type Apiversa } from 'apiversa';
 
-export type RouteDecl = { body?: string; response?: string };
+export type RouteDecl = { body?: string; response?: string; bundle?: string };
 
 type VersionedRequest = {
   headers: Record<string, string | string[] | undefined>;
@@ -62,25 +62,26 @@ export function apiversa(av: Apiversa): RequestHandler {
 
 /** Express middleware for one route. A head request does not read or rewrite the body. */
 export function route(av: Apiversa, decl: RouteDecl): RequestHandler {
+  const selected = pickBundle(av, decl.bundle);
   return (req, res, next) => {
     const request = req as unknown as VersionedRequest;
     const response = res as unknown as VersionedResponse;
     let version: string;
     try {
-      const decision = av.resolveDecision({ headers: request.headers, request, path: request.originalUrl ?? request.path });
+      const decision = selected.resolveDecision({ headers: request.headers, request, path: request.originalUrl ?? request.path });
       version = decision.version;
-      for (const header of [...decision.headers, ...av.deprecationHeaders(version), ...av.endpointDeprecationHeaders(version, request.method, request.path)]) response.setHeader(header.name, header.value);
-      av.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${request.method} ${request.path}` });
+      for (const header of [...decision.headers, ...selected.deprecationHeaders(version), ...selected.endpointDeprecationHeaders(version, request.method, request.path)]) response.setHeader(header.name, header.value);
+      selected.note(version, undefined, { unpinned: decision.source === 'default', endpoint: `${request.method} ${request.path}` });
       const seen = { method: request.method, path: request.path };
-      const emptyUp = !decl.body || av.planIsEmpty(version, decl.body, 'up', seen);
-      const emptyDown = !decl.response || av.planIsEmpty(version, decl.response, 'down', seen);
+      const emptyUp = !decl.body || selected.planIsEmpty(version, decl.body, 'up', seen);
+      const emptyDown = !decl.response || selected.planIsEmpty(version, decl.response, 'down', seen);
       const type = contentType(request.headers);
       const raw = decl.body && !emptyUp && isForm(type) ? rawText(request.body) : undefined;
       if (raw !== undefined && decl.body) {
-        const converted = convertForm(av, raw, type, decl.body, version, 'up');
+        const converted = convertForm(selected, raw, type, decl.body, version, 'up');
         request.body = type.includes('multipart/form-data') ? converted.body : converted.fields;
       }
-      const prepared = av.prepare('up', {
+      const prepared = selected.prepare('up', {
         schema: decl.body,
         body: raw === undefined && decl.body && !emptyUp ? request.body : undefined,
         version,
@@ -90,12 +91,19 @@ export function route(av: Apiversa, decl: RouteDecl): RequestHandler {
       });
       if (prepared.legacyHandler) request.apiversaLegacy = prepared.legacyHandler;
       if (raw === undefined && decl.body && !emptyUp && request.body !== undefined) request.body = prepared.body;
-      if (decl.response && !emptyDown) wrap(av, response, version, decl.response, request);
+      if (decl.response && !emptyDown) wrap(selected, response, version, decl.response, request);
       next();
     } catch (error) {
       sendError(response, error);
     }
   };
+}
+
+function pickBundle(av: Apiversa, name: string | undefined): Apiversa {
+  const names = av.bundleNames;
+  if (!names) return name && av.bundle ? av.bundle(name) : av;
+  if (!name) return names.length > 1 && av.bundle ? av.bundle('') : av;
+  return av.bundle ? av.bundle(name) : av;
 }
 
 function wrap(av: Apiversa, res: VersionedResponse, version: string, schema: string, req: VersionedRequest): void {

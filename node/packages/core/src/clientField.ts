@@ -25,7 +25,8 @@ export function clientField(bundle: Bundle, version: string, schema: string, hea
   for (const change of newer) {
     for (const op of [...change.ops].reverse()) {
       if (op.schema && op.schema !== schema) continue;
-      if ((op.op === 'field.rename' || op.op === 'field.move') && op.to && op.from) path = replacePath(path, op.to, op.from);
+      if ((op.op === 'field.rename' || op.op === 'field.move' || op.op === 'field.alias') && op.to && op.from) path = replacePath(path, op.to, op.from);
+      else if (op.op === 'field.copy' && op.to && covers(path, op.to)) introduced = true;
       else if (op.op === 'field.add' && op.path && covers(path, op.path)) introduced = true;
     }
   }

@@ -21,7 +21,7 @@ public final class ReleasedLock {
         if (!problems(dir, lock).isEmpty()) throw ApiversaException.fail("AV-E006", "startup");
     }
 
-    static List<String> problems(Path dir, Path lock) {
+    public static List<String> problems(Path dir, Path lock) {
         try {
             Map<String, String> locked = lockedFiles(Files.readString(lock));
             TreeSet<String> names = new TreeSet<>(locked.keySet());

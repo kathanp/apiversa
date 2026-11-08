@@ -34,8 +34,13 @@ export type ConvertInput = {
   request?: unknown;
 };
 
+export type BundleSource = { dir: string; pins?: PinStore };
+
 export type CreateOptions = {
-  dir: string;
+  /** One bundle. Its name is `default`. Omit this when `bundles` is set. */
+  dir?: string;
+  /** Named bundles. Each directory has its own head, change files, and pins. */
+  bundles?: Record<string, BundleSource>;
   /** Ordered field lists. Build them with `@apiversa/zod` when the host uses Zod. */
   schemas?: Registry;
   /** Version header name. Default `Api-Version`. */
@@ -60,13 +65,17 @@ export type CreateOptions = {
   now?: string;
   /** Old URL prefixes mapped to dates, for example `{ '/v1': '2025-10-01' }`. A version header and a resolver both win over a prefix. */
   legacyPrefixes?: Record<string, string>;
+  /** Read a `version` parameter on `Content-Type` after the version header is absent. Off unless set. */
+  mediaType?: boolean;
+  /** Query parameter name. Unset means the query is not a version source. */
+  queryVersion?: string;
 };
 
 export type Apiversa = {
   /** Resolve the client version: header, host resolver, then the bundle default. */
-  resolveVersion(input: { headers?: HeaderInput; request?: unknown; clientId?: string; path?: string }): string;
+  resolveVersion(input: { headers?: HeaderInput; request?: unknown; clientId?: string; path?: string; query?: string }): string;
   /** Same resolution as {@link Apiversa.resolveVersion}, plus which rule won and the response headers to set. */
-  resolveDecision(input: { headers?: HeaderInput; request?: unknown; clientId?: string; path?: string }): { version: string; source: VersionSource; headers: { name: string; value: string }[] };
+  resolveDecision(input: { headers?: HeaderInput; request?: unknown; clientId?: string; path?: string; query?: string }): { version: string; source: VersionSource; headers: { name: string; value: string }[] };
   /** Upgrade a request body to head. Returns the original reference when the plan is empty. */
   convertRequest(input: ConvertInput): unknown;
   /** Downgrade a response body from head. Returns the original reference when the plan is empty. */
@@ -105,6 +114,10 @@ export type Apiversa = {
   prometheus(): string;
   /** Metric points a host can hand to its own OpenTelemetry meter. */
   metrics(): MetricPoint[];
+  /** Names loaded at startup. A single `dir` is `['default']`. */
+  bundleNames?: readonly string[];
+  /** The engine for one bundle. An unknown name is AV-E001. */
+  bundle?(name: string): Apiversa;
 };
 
 /**
@@ -112,27 +125,93 @@ export type Apiversa = {
  * Plans are fixed at startup. An empty plan does not parse the body.
  */
 export function createApiversa(options: CreateOptions): Apiversa {
-  const development = options.development ?? process.env.NODE_ENV !== 'production';
-  const trace = options.trace === true || (development && options.trace !== false);
-  const usage = new Usage();
-  const bundle = loadBundle(options.dir, {
+  if (options.dir && options.bundles) throw fail('AV-E001', 'startup');
+  const limits = {
+    maxBodyBytes: options.maxBodyBytes ?? DEFAULT_LIMITS.maxBodyBytes,
+    maxArrayItems: options.maxArrayItems ?? DEFAULT_LIMITS.maxArrayItems,
+  };
+  if (options.bundles) {
+    const entries = Object.entries(options.bundles);
+    if (entries.length === 0) throw fail('AV-E001', 'startup');
+    if (options.pins && entries.length > 1) throw fail('AV-E001', 'startup');
+    const map = new Map<string, Apiversa>();
+    for (const [name, source] of entries) {
+      const pins = source.pins ?? (entries.length === 1 ? options.pins : undefined);
+      const loaded = loadBundle(source.dir, {
+        registry: options.schemas ?? {},
+        converters: options.converters,
+        pins,
+        limits,
+        oversize: options.oversize,
+        now: options.now,
+        headerName: options.header,
+      });
+      map.set(name, api(loaded, runtimeOptions(options)));
+    }
+    const names = entries.map(([name]) => name);
+    const lookup = (name: string) => {
+      const found = map.get(name);
+      if (!found) throw fail('AV-E001', 'startup');
+      return found;
+    };
+    if (names.length === 1) return attachBundles(lookup(names[0]!), names, lookup);
+    return unboundBundles(names, lookup);
+  }
+  if (!options.dir) throw fail('AV-E001', 'startup');
+  const loaded = loadBundle(options.dir, {
     registry: options.schemas ?? {},
     converters: options.converters,
     pins: options.pins,
-    limits: {
-      maxBodyBytes: options.maxBodyBytes ?? DEFAULT_LIMITS.maxBodyBytes,
-      maxArrayItems: options.maxArrayItems ?? DEFAULT_LIMITS.maxArrayItems,
-    },
+    limits,
     oversize: options.oversize,
     now: options.now,
     headerName: options.header,
   });
-  return api(bundle, { header: options.header ?? 'Api-Version', resolve: options.resolve, development, trace, usage, onCount: options.onCount, onConvert: options.onConvert, legacyPrefixes: options.legacyPrefixes });
+  const av = api(loaded, runtimeOptions(options));
+  return attachBundles(av, ['default'], (name) => {
+    if (name !== 'default') throw fail('AV-E001', 'startup');
+    return av;
+  });
+}
+
+function runtimeOptions(options: CreateOptions): { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean; usage?: Usage; onCount?: (snapshot: CountSnapshot) => void; onConvert?: (event: { change: string; direction: Direction; ms: number }) => void; legacyPrefixes?: Record<string, string>; mediaType?: boolean; queryVersion?: string } {
+  const development = options.development ?? process.env.NODE_ENV !== 'production';
+  const trace = options.trace === true || (development && options.trace !== false);
+  return { header: options.header ?? 'Api-Version', resolve: options.resolve, development, trace, usage: new Usage(), onCount: options.onCount, onConvert: options.onConvert, legacyPrefixes: options.legacyPrefixes, mediaType: options.mediaType, queryVersion: options.queryVersion };
+}
+
+function attachBundles(av: Apiversa, names: readonly string[], lookup: (name: string) => Apiversa): Apiversa {
+  av.bundleNames = names;
+  av.bundle = (name) => {
+    if (!names.includes(name)) throw fail('AV-E001', 'startup');
+    return lookup(name);
+  };
+  return av;
+}
+
+function unboundBundles(names: readonly string[], lookup: (name: string) => Apiversa): Apiversa {
+  const reject = () => {
+    throw fail('AV-E001', 'startup');
+  };
+  const target = {
+    bundleNames: names,
+    bundle(name: string) {
+      if (!names.includes(name)) throw fail('AV-E001', 'startup');
+      return lookup(name);
+    },
+  };
+  return new Proxy(target, {
+    get(holder, key) {
+      if (key in holder) return holder[key as keyof typeof holder];
+      if (key === 'then') return undefined;
+      return reject;
+    },
+  }) as Apiversa;
 }
 
 export function api(
   bundle: Bundle,
-  opts: { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean; usage?: Usage; onCount?: (snapshot: CountSnapshot) => void; onConvert?: (event: { change: string; direction: Direction; ms: number }) => void; legacyPrefixes?: Record<string, string> },
+  opts: { header: string; resolve?: (request: unknown) => string | undefined; development: boolean; trace: boolean; usage?: Usage; onCount?: (snapshot: CountSnapshot) => void; onConvert?: (event: { change: string; direction: Direction; ms: number }) => void; legacyPrefixes?: Record<string, string>; mediaType?: boolean; queryVersion?: string },
 ): Apiversa {
   const usage = opts.usage ?? new Usage();
   function hostVersion(input: { headers?: HeaderInput; request?: unknown }): string | undefined {
@@ -143,7 +222,7 @@ export function api(
   function prepare(direction: Direction, input: ConvertInput): ExecuteResult {
     const version = input.version
       ? resolveVersion(bundle, { headers: { [opts.header]: input.version }, headerName: opts.header })
-      : resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, legacyPrefixes: opts.legacyPrefixes });
+      : resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, query: typeof input.query === 'string' ? input.query : undefined, legacyPrefixes: opts.legacyPrefixes, mediaType: opts.mediaType, queryName: opts.queryVersion });
     return execute(
       bundle,
       {
@@ -166,10 +245,10 @@ export function api(
   }
   return {
     resolveVersion(input) {
-      return resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, legacyPrefixes: opts.legacyPrefixes });
+      return resolveVersion(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, query: input.query, legacyPrefixes: opts.legacyPrefixes, mediaType: opts.mediaType, queryName: opts.queryVersion });
     },
     resolveDecision(input) {
-      const decision = resolveDecision(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, legacyPrefixes: opts.legacyPrefixes });
+      const decision = resolveDecision(bundle, { headers: input.headers, headerName: opts.header, resolved: hostVersion(input), clientId: input.clientId, path: input.path, query: input.query, legacyPrefixes: opts.legacyPrefixes, mediaType: opts.mediaType, queryName: opts.queryVersion });
       return { ...decision, headers: clientHeaders(opts.header, decision.version, decision.source) };
     },
     convertRequest(input) {

@@ -65,7 +65,7 @@ final class ApiversaMvc {
             }
         }
         String resolved = headerPresent || host == null ? null : host.resolve(request);
-        return Engine.resolveDecision(bundle, headerMap(request), properties.getHeader(), resolved, null);
+        return Engine.resolveDecision(bundle, headerMap(request), properties.getHeader(), resolved, null, path(request), properties.getLegacyPrefixes(), properties.isMediaType(), properties.getQueryVersion(), request.getQueryString());
     }
 
     static void writeError(HttpServletResponse response, ApiversaException exception) throws IOException {

@@ -21,7 +21,7 @@ export function changelogBundle(dir: string): { markdown: string; json: Changelo
       changes: files
         .filter((file) => file.version === date)
         .sort((left, right) => left.id.localeCompare(right.id))
-        .map((file) => ({ id: file.id, description: file.description, endpoints: endpointsFor(file, routes) })),
+        .map((file) => ({ id: file.id, description: aliasDescription(file), endpoints: endpointsFor(file, routes) })),
     })),
   };
   return { markdown: render(json), json };
@@ -35,6 +35,11 @@ export function writeChangelog(dir: string): { markdown: string; json: Changelog
   writeFileSync(markdownPath, `${result.markdown}\n`);
   writeFileSync(jsonPath, `${JSON.stringify(result.json)}\n`);
   return { ...result, markdownPath, jsonPath };
+}
+
+function aliasDescription(file: ChangeFile): string {
+  const alias = file.changes.find((op) => op.op === 'field.alias' && op.from && op.to);
+  return alias ? `${file.description} (${alias.from}, ${alias.to})` : file.description;
 }
 
 function render(doc: ChangelogDocument): string {

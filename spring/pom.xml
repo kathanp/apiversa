@@ -19,6 +19,15 @@
     <module>apiversa-kafka</module>
     <module>apiversa-kotlin</module>
     <module>apiversa-spring-framework7</module>
+    <module>apiversa-sqs</module>
+    <module>apiversa-rabbit</module>
+    <module>apiversa-pin-redis</module>
+    <module>apiversa-pin-postgres</module>
+    <module>apiversa-gateway</module>
+    <module>apiversa-client</module>
+    <module>apiversa-client-kotlin</module>
+    <module>apiversa-spring-cloud-function</module>
+    <module>apiversa-websocket</module>
   </modules>
   <properties>
     <revision>0.1.0</revision>
@@ -40,6 +49,26 @@
       <dependency>
         <groupId>io.github.kathanp</groupId>
         <artifactId>apiversa-spring-boot-starter</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.kathanp</groupId>
+        <artifactId>apiversa-kafka</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.kathanp</groupId>
+        <artifactId>apiversa-client</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.kathanp</groupId>
+        <artifactId>apiversa-spring-cloud-function</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.kathanp</groupId>
+        <artifactId>apiversa-websocket</artifactId>
         <version>${revision}</version>
       </dependency>
       <dependency>

@@ -2,6 +2,20 @@
 
 One section per track and version, newest version first. Node and Spring are interleaved by version number. The agent adds one line per finished roadmap ID while building (`- <ID> <title>`). A release renames `(unreleased)` to the release date. Each section has a migration line (`docs/STABILITY.md`).
 
+## spring 1.8.0 (unreleased)
+
+- CORE-36 Media type version
+- CORE-37 Query version
+- SPR-17 WebSocket text frame
+- Migration: none. A `Content-Type` version parameter and a query parameter are ignored unless the host sets `apiversa.media-type=true` or `apiversa.query-version`. The version header still wins.
+
+## node 1.8.0 (unreleased)
+
+- CORE-36 Media type version
+- CORE-37 Query version
+- FW-08 h3 adapter
+- Migration: none. `mediaType` and `queryVersion` are off unless the host sets them. The version header still wins. `@apiversa/h3` wraps one event handler and does not open a socket.
+
 ## spring 1.7.0 (unreleased)
 
 - SHR-07 Bundle diff

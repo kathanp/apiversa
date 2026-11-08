@@ -17,14 +17,24 @@ public class CheckMojo extends AbstractMojo {
     @Parameter(property = "apiversa.today")
     private String today;
 
+    /** {@code -Dsuggest=true} writes a draft change file. Startup still refuses that draft. */
+    @Parameter(property = "apiversa.suggest", defaultValue = "false")
+    private boolean suggest;
+
     @Override
     public void execute() throws MojoFailureException {
         try {
             PluginGoals.load(dir.toPath(), today);
             List<String> diffs = PluginGoals.headDiff(dir.toPath());
+            if (suggest) {
+                String written = PluginGoals.suggest(dir.toPath());
+                if (written != null) getLog().warn("wrote draft " + written);
+            }
             if (!diffs.isEmpty()) throw new MojoFailureException(String.join("\n", diffs));
             getLog().info("apiversa check passed");
-        } catch (RuntimeException exception) {
+        } catch (MojoFailureException exception) {
+            throw exception;
+        } catch (Exception exception) {
             throw new MojoFailureException(exception.getMessage(), exception);
         }
     }

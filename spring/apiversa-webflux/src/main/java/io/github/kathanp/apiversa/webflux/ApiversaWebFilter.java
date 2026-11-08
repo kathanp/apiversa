@@ -80,7 +80,8 @@ public final class ApiversaWebFilter implements WebFilter, Ordered {
         if (cached instanceof String text) return text;
         Map<String, List<String>> headers = new LinkedHashMap<>();
         exchange.getRequest().getHeaders().forEach(headers::put);
-        Engine.Decision decision = Engine.resolveDecision(bundle, headers, properties.getHeader(), null, null);
+        String query = exchange.getRequest().getURI().getRawQuery();
+        Engine.Decision decision = Engine.resolveDecision(bundle, headers, properties.getHeader(), null, null, exchange.getRequest().getURI().getPath(), properties.getLegacyPrefixes(), properties.isMediaType(), properties.getQueryVersion(), query);
         exchange.getAttributes().put(VERSION, decision.version());
         exchange.getAttributes().put(SOURCE, decision.source());
         return decision.version();

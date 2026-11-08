@@ -67,7 +67,10 @@ public final class ApiversaOpenApi {
         if ("field.add".equals(name) && op.get("path") instanceof String path && simple(path)) {
             properties.remove(path);
             schema.setProperties(properties);
-        } else if (("field.rename".equals(name) || "field.move".equals(name)) && op.get("from") instanceof String from && op.get("to") instanceof String to && simple(from) && simple(to)) {
+        } else if ("field.copy".equals(name) && op.get("to") instanceof String to && simple(to)) {
+            properties.remove(to);
+            schema.setProperties(properties);
+        } else if (("field.rename".equals(name) || "field.move".equals(name) || "field.alias".equals(name)) && op.get("from") instanceof String from && op.get("to") instanceof String to && simple(from) && simple(to)) {
             Schema field = properties.remove(to);
             if (field == null) return;
             Map<String, Schema> renamed = new LinkedHashMap<>();

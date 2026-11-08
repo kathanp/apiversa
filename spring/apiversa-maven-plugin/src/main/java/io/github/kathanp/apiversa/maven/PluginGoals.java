@@ -91,10 +91,19 @@ public final class PluginGoals {
         for (String date : bundle.dates()) {
             out.append("## ").append(date).append('\n');
             for (Engine.Change change : bundle.changes()) {
-                if (date.equals(change.version())) out.append("- ").append(change.id()).append(": ").append(change.description()).append('\n');
+                if (date.equals(change.version())) out.append("- ").append(change.id()).append(": ").append(aliasDescription(change)).append('\n');
             }
         }
         return out.toString();
+    }
+
+    private static String aliasDescription(Engine.Change change) {
+        for (Map<String, Object> op : change.ops()) {
+            if ("field.alias".equals(op.get("op")) && op.get("from") != null && op.get("to") != null) {
+                return change.description() + " (" + op.get("from") + ", " + op.get("to") + ")";
+            }
+        }
+        return change.description();
     }
 
     /** Changes between each older date and head, in chain order. Descriptions come from the change files. */
@@ -115,6 +124,33 @@ public final class PluginGoals {
             versions.put(date, rows);
         }
         Map<String, Object> document = new LinkedHashMap<>();
+        document.put("head", bundle.head());
+        document.put("versions", versions);
+        return Json.encode(Json.fromPlain(document, "down"), "down");
+    }
+
+    /** Dates newest first. Change ids between that date and head, in chain order. */
+    public static String compat(Path dir, String today) {
+        Engine.Bundle bundle = load(dir, today);
+        Map<String, Engine.VersionInfo> info = new java.util.LinkedHashMap<>();
+        for (Engine.VersionInfo item : bundle.versionInfo()) info.put(item.date(), item);
+        List<Map<String, Object>> versions = new ArrayList<>();
+        for (String date : bundle.dates()) {
+            Engine.VersionInfo item = info.get(date);
+            List<Engine.Change> changes = new ArrayList<>();
+            for (Engine.Change change : bundle.changes()) if (change.version().compareTo(date) > 0) changes.add(change);
+            changes.sort(java.util.Comparator.comparing(Engine.Change::version).thenComparing(Engine.Change::id));
+            List<String> ids = new ArrayList<>();
+            for (Engine.Change change : changes) ids.add(change.id());
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("date", date);
+            row.put("deprecated", item != null && item.deprecated());
+            row.put("sunset", item == null ? null : item.sunset());
+            row.put("sunsetEnforce", item != null && item.sunsetEnforce());
+            row.put("changes", ids);
+            versions.add(row);
+        }
+        Map<String, Object> document = new java.util.LinkedHashMap<>();
         document.put("head", bundle.head());
         document.put("versions", versions);
         return Json.encode(Json.fromPlain(document, "down"), "down");
@@ -211,8 +247,45 @@ public final class PluginGoals {
         return out;
     }
 
+    /**
+     * Writes a draft change file for an added, removed, or renamed field.
+     * Returns the path, or null when there is nothing to suggest. An existing file is left as it is.
+     */
+    public static String suggest(Path dir) throws IOException {
+        Path head = dir.resolve("head.json");
+        Path snapshot = newestSnapshot(dir);
+        if (!Files.exists(head) || snapshot == null) return null;
+        String headDate = headDate(dir);
+        List<SchemaDiff> diffs = schemaDiffs(fields(snapshot), fields(head));
+        boolean covered = covered(dir, headDate);
+        if (diffs.isEmpty() || covered || headDate.isEmpty()) return null;
+        List<SchemaDiff> ops = diffs.stream().filter(diff -> "added".equals(diff.kind) || "removed".equals(diff.kind) || "renamed".equals(diff.kind)).toList();
+        if (ops.isEmpty()) return null;
+        Path file = dir.resolve(headDate + ".suggested.yaml");
+        if (Files.exists(file)) return file.toString();
+        StringBuilder changes = new StringBuilder();
+        for (SchemaDiff diff : ops) {
+            if ("renamed".equals(diff.kind)) changes.append("  - op: field.rename\n    schema: ").append(diff.schema).append("\n    from: ").append(diff.from).append("\n    to: ").append(diff.to).append('\n');
+            else if ("removed".equals(diff.kind)) changes.append("  - op: field.remove\n    schema: ").append(diff.schema).append("\n    path: ").append(diff.path).append("\n    default: null\n");
+            else changes.append("  - op: field.add\n    schema: ").append(diff.schema).append("\n    path: ").append(diff.path).append("\n    default: null\n");
+        }
+        String text = "version: \"" + headDate + "\"\nid: suggested\ndescription: \"Draft from apiversa check.\"\ndraft: true\nchanges:\n" + changes;
+        Files.writeString(file, text);
+        return file.toString();
+    }
+
     private static List<String> diffSchemas(Map<String, List<HeadField>> before, Map<String, List<HeadField>> after) {
         List<String> diffs = new ArrayList<>();
+        for (SchemaDiff diff : schemaDiffs(before, after)) {
+            if ("renamed".equals(diff.kind)) diffs.add(diff.schema + "." + diff.from + " renamed to " + diff.to);
+            else if ("type".equals(diff.kind)) diffs.add(diff.schema + "." + diff.path + " type " + diff.from + " -> " + diff.to);
+            else diffs.add(diff.schema + "." + diff.path + " " + diff.kind);
+        }
+        return diffs;
+    }
+
+    private static List<SchemaDiff> schemaDiffs(Map<String, List<HeadField>> before, Map<String, List<HeadField>> after) {
+        List<SchemaDiff> diffs = new ArrayList<>();
         Set<String> names = new HashSet<>();
         names.addAll(before.keySet());
         names.addAll(after.keySet());
@@ -221,18 +294,20 @@ public final class PluginGoals {
             List<HeadField> newFields = after.getOrDefault(schema, List.of());
             List<HeadField> removed = oldFields.stream().filter(field -> newFields.stream().noneMatch(item -> item.name.equals(field.name))).toList();
             List<HeadField> added = newFields.stream().filter(field -> oldFields.stream().noneMatch(item -> item.name.equals(field.name))).toList();
-            if (removed.size() == 1 && added.size() == 1) diffs.add(schema + "." + removed.get(0).name + " renamed to " + added.get(0).name);
+            if (removed.size() == 1 && added.size() == 1) diffs.add(new SchemaDiff(schema, "renamed", added.get(0).name, removed.get(0).name, added.get(0).name));
             else {
-                for (HeadField field : removed) diffs.add(schema + "." + field.name + " removed");
-                for (HeadField field : added) diffs.add(schema + "." + field.name + " added");
+                for (HeadField field : removed) diffs.add(new SchemaDiff(schema, "removed", field.name, null, null));
+                for (HeadField field : added) diffs.add(new SchemaDiff(schema, "added", field.name, null, null));
             }
             for (HeadField field : newFields) {
                 HeadField previous = oldFields.stream().filter(item -> item.name.equals(field.name)).findFirst().orElse(null);
-                if (previous != null && !previous.type.equals(field.type)) diffs.add(schema + "." + field.name + " type " + previous.type + " -> " + field.type);
+                if (previous != null && !previous.type.equals(field.type)) diffs.add(new SchemaDiff(schema, "type", field.name, previous.type, field.type));
             }
         }
         return diffs;
     }
+
+    private record SchemaDiff(String schema, String kind, String path, String from, String to) {}
 
     private static final class HeadField {
         private final String name;

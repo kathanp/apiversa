@@ -43,6 +43,7 @@ Outgoing webhooks use the same `down` path through `downgradeEvent`. A subscribe
 | `node/packages/fastify/`               | Fastify adapter                                              |
 | `node/packages/nest/`                  | NestJS adapter                                               |
 | `node/packages/hono/`                  | Hono adapter                                                 |
+| `node/packages/h3/`                    | h3 event handler (FW-08)                                     |
 | `node/packages/pin-redis/`             | Redis pin store. The host supplies the client                |
 | `node/packages/pin-postgres/`          | Postgres pin store. The host supplies the pool               |
 | `node/packages/otel/`                  | One span per conversion chain. No span on head               |
@@ -63,13 +64,14 @@ Outgoing webhooks use the same `down` path through `downgradeEvent`. A subscribe
 | `spring/apiversa-kafka/`               | Kafka records and queue message conversion                   |
 | `spring/apiversa-kotlin/`              | Kotlin converter DSL and client-field extension              |
 | `spring/apiversa-spring-framework7/`   | Spring Framework 7 `ApiVersionResolver`                      |
+| `spring/apiversa-websocket/`           | WebSocket text frame (SPR-17). The host owns the session     |
 
 Rows marked (planned) do not exist yet. When the agent creates a path, it removes "(planned)" from that row in the same commit. The guard fails on a row that names a missing path without "(planned)". Every row in this table was checked against the tree on 2026-11-01. Each path exists, so none is marked (planned).
 
 ## Known gaps
 
 - A repeated form key is `AV-E015` (D-55). MVC switches a form body onto `FormBodies` before the form converter.
-- `examples/spring-native` has not been built as a native image. This machine has no `native-image`, and workflow files are protected. SPR-11 moves to spring 0.17.0 and stays unchecked (D-56).
+- `examples/spring-native` builds with `mvn -Pnative verify`. The app image and the native test passed locally on GraalVM 21.0.12. CI does not run that profile, and workflow files are protected, so SPR-11 stays unchecked on spring 0.17.0 (D-58).
 
 ## Design choices that matter
 

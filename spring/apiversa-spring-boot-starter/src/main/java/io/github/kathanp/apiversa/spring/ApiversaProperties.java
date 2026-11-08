@@ -1,6 +1,8 @@
 package io.github.kathanp.apiversa.spring;
 
 import io.github.kathanp.apiversa.Json;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** {@code apiversa.*} settings. The version policy still comes from {@code versions.yaml}. */
@@ -16,6 +18,12 @@ public class ApiversaProperties {
     private String oversize = "error";
     private int maxBodyBytes = Json.MAX_BODY_BYTES;
     private int maxArrayItems = Json.MAX_ARRAY_ITEMS;
+    /** Prefix to date. Header, then resolver, then the longest prefix. ADOPT-01. */
+    private Map<String, String> legacyPrefixes = new LinkedHashMap<>();
+    /** Off unless {@code apiversa.media-type=true}. */
+    private boolean mediaType;
+    /** Empty unless the host sets {@code apiversa.query-version}. */
+    private String queryVersion = "";
 
     public String getDir() {
         return dir;
@@ -90,5 +98,29 @@ public class ApiversaProperties {
 
     public void setMaxArrayItems(int maxArrayItems) {
         this.maxArrayItems = maxArrayItems;
+    }
+
+    public Map<String, String> getLegacyPrefixes() {
+        return legacyPrefixes;
+    }
+
+    public void setLegacyPrefixes(Map<String, String> legacyPrefixes) {
+        this.legacyPrefixes = legacyPrefixes == null ? new LinkedHashMap<>() : legacyPrefixes;
+    }
+
+    public boolean isMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(boolean mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getQueryVersion() {
+        return queryVersion;
+    }
+
+    public void setQueryVersion(String queryVersion) {
+        this.queryVersion = queryVersion == null ? "" : queryVersion;
     }
 }

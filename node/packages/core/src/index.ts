@@ -13,6 +13,7 @@ export { openApiVersions, versionPicker, writeOpenApi, type OpenApiDocument, typ
 export { changelogBundle, writeChangelog, type ChangelogDocument } from './cli/changelog.js';
 export { eject } from './cli/eject.js';
 export { upgradeGuide } from './cli/upgradeGuide.js';
+export { snippetBytes, writeSnippets } from './cli/snippets.js';
 export { explain } from './cli/explain.js';
 export { retire } from './cli/retire.js';
 export { replay } from './cli/replay.js';
@@ -22,6 +23,7 @@ export { typeDiff } from './cli/typeDiff.js';
 export { toMatchVersion } from './testing.js';
 export { downgradeNdjson, downgradeNdjsonLine, downgradeSse, downgradeSseLine } from './stream.js';
 export { convertForm, type FormResult } from './form.js';
+export { messageDowngrade, messageUpgrade } from './messages.js';
 export { clientField, clientValidation, type ClientField, type ClientIssue, type SchemaParser } from './clientField.js';
 export { memoryPins, type CountSnapshot, type MetricPoint } from './lifecycle.js';
 export { testBundle, type ContractResult } from './cli/contract.js';

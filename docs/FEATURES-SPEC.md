@@ -135,6 +135,12 @@ Every operation is pure. It reads one JSON value and returns a new one.
 | Op               | Down (new → old)                                 | Up (old → new)                                   | Required fields              |
 | ---------------- | ------------------------------------------------ | ------------------------------------------------ | ---------------------------- |
 | `field.rename`   | rename `to` back to `from`                       | rename `from` to `to`                            | `schema`, `from`, `to`       |
+| `field.alias`    | write `from` and remove `to`                     | accept `from` or `to`; both present is `AV-E018` | `schema`, `from`, `to`       |
+| `field.split`    | join `left` and `right` with `separator` into `from`, then remove both | split `from` on the first `separator` into `left` and `right`, then remove `from` | `schema`, `from`, `left`, `right`, `separator` |
+| `field.copy`     | copy `from` onto `to` when `to` is absent        | remove `to` when it equals `from`; a different value is `AV-E020` | `schema`, `from`, `to`       |
+| `field.join`     | split `from` on the first `separator` into `left` and `right`, then remove `from` | join `left` and `right` with `separator` into `from`, then remove both | `schema`, `from`, `left`, `right`, `separator` |
+| `field.list`     | unwrap a one-element array at `to` into `from`; any other length is `AV-E023` | wrap `from` into a one-element array at `to` | `schema`, `from`, `to`       |
+| `field.null`     | remove a JSON `null`; any other value stays      | write JSON `null` when the key is absent; any present value stays | `schema`, `path`             |
 | `field.add`      | remove the key when its value equals `default` (B10) | set `default` when the key is absent; `null` stays `null` (B10) | `schema`, `path`, `default`  |
 | `field.remove`   | set `default` when the key is absent (B10)       | delete the key when it is present, including `null` | `schema`, `path`, `default`  |
 | `field.move`     | move `to` back to `from`                         | move `from` to `to`                              | `schema`, `from`, `to`       |
@@ -339,7 +345,7 @@ Every client-visible code in F3 returns HTTP status from that table and a JSON b
 In development mode, inputs to converters are deep-frozen. A converter that mutates its input throws `AV-E007` naming the change. The request fails with HTTP `500` and the error envelope.
 
 #### CORE-12 — Limits
-- Max body converted: 1 MiB by default (`maxBodyBytes`). Above it: `oversize: 'error'` (default, `413` with `AV-E008` on the way up, `500` with `AV-E008` on the way down) or `'passthrough'` (opt-in). Passthrough sends the head shape on the way up only, and logs a warning. On the way down, oversize is always `AV-E008`. The head shape is never sent to an older client: that client would accept a body it does not understand (D-43). The head shape is not sent for `AV-E014` or `AV-E015`.
+- Max body converted: 1 MiB by default (`maxBodyBytes`). Above it: `oversize: 'error'` (default, `413` with `AV-E008` on the way up and on the way down) or `'passthrough'` (opt-in). Passthrough sends the head shape on the way up only, and logs a warning. On the way down, oversize is always `413` with `AV-E008`. The head shape is never sent to an older client: that client would accept a body it does not understand (D-43). The head shape is not sent for `AV-E014` or `AV-E015`.
 - Keys `__proto__`, `constructor`, `prototype` are dropped from every object in a converted body before ops run.
 - Max array items converted per response: 10,000 (`maxArrayItems`); above it → `413` with `AV-E009`.
 - Duplicate keys are `AV-E015`. Integers outside ±(2^53−1), and non-finite numbers, are `AV-E014`.
@@ -433,6 +439,79 @@ Any field, enum, or object op may set `scope: { routes: ["GET /hotels/:id", ...]
 - Done when: the headers are present on an old version and on head; OpenAPI before the change is not marked; one SHR-04 case covers it.
 - Refuses: rejecting the request. Rejection is `endpoint.remove`.
 
+#### CORE-28 — Named bundles
+One process may hold two or more bundles. Each bundle has its own directory, `versions.yaml`, change files, and head. A date in one bundle is unknown in the other.
+- Node keeps `dir` for a single bundle. That bundle's name is `default`. `bundles` is a map of name to `{ dir }`. `av.route({ bundle, ... })` selects the name. Spring keeps `apiversa.dir` for a single bundle. `apiversa.bundles.<name>.dir` adds another. `@ApiversaBundle("billing")` on the handler method selects the name.
+- One bundle and no `bundle` argument stays today's configuration. Two bundles and a route with no name fails startup with `AV-E001`. An unknown bundle name fails startup with `AV-E001`.
+- `supportedVersions` on an error lists that bundle's dates only. A conformance case may set `bundle`. With no `bundle`, the case uses the only bundle.
+- Done when: a date that exists only in `identity` is `AV-E002` on a `billing` route; a single-`dir` app does not set `bundles`; one case runs a change from the named bundle and does not run a change from the other.
+- Refuses: sharing a head, a change file, or a pin across bundles.
+
+#### CORE-29 — Field alias
+`field.alias` accepts either name on the way up for one window. `from` is the older name. `to` is the head name. Both are B5 paths. A key with value `null` is present. A missing key is absent.
+- Up: only `from` moves the value to `to`. Only `to` stays. Neither is a no-op. Both present is `AV-E018`, and no body is returned. Down: the output has `from` and does not have `to`. Only `to` moves the value to `from`. Both present on the way down keeps the `from` value and drops `to`.
+- OpenAPI before the change date shows `from` and omits `to`. OpenAPI from the change date through head shows `to`. The changelog line for that change lists both names.
+- A change file that contains `field.alias` fails startup with `AV-E001` until this ID has shipped on that track.
+- Done when: an older body with `from` becomes `to` at head; a body that already has `to` stays; both keys on the way up return `AV-E018` and no body; the down body has `from` only; one conformance case covers the op on Node and on Spring.
+- Refuses: reading a clock, a file, or the network. Reusing `AV-E015`. `AV-E015` stays duplicate-key only.
+
+#### CORE-30 — Rewrite a JSONL file
+`apiversa rewrite` reads a JSONL file the host already has and writes each line in another version. `--schema` names the schema. `--direction up` reads lines at `--version` and writes head. `--direction down` reads head lines and writes `--version`. `--in` and `--out` are the paths. Spring `mvn apiversa:rewrite` takes the same values as `-Dschema`, `-Ddirection`, `-Dversion`, `-Din`, and `-Dout`. The output bytes match.
+- One line is one JSON value. A blank line fails. Line 1 is the first line. More than 10,000 lines is `AV-E019`. That number is CORE-12 `maxArrayItems`. It is not a new limit. A line that fails conversion prints `line <n>: <code>` on stderr.
+- Any failure exits 1 and does not leave `--out` on disk. Success writes one canonical JSON value per line (B7), same count as the input.
+- Done when: an older line becomes the head shape; a head line downgrades to `--version`; line 10001 exits 1 with `AV-E019` and no output file; a bad line exits 1 with the line number and no output file; Node and Spring write the same bytes.
+- Refuses: opening a socket, reading a database, or leaving a partial output file.
+
+#### CORE-31 — Field split
+`field.split` turns one string into two fields. `separator` is a literal string of 1 to 32 characters. An empty separator, a longer separator, or a regular expression fails startup with `AV-E001`.
+- Up: `from` must be a string. The split is the first occurrence of `separator`. The part before is written to `left`. The part after is written to `right`. `from` is removed. `left` and `right` must be absent, or the result is `AV-E020` and no body. A missing separator is `AV-E021` and no body. A non-string `from` is `AV-E016`.
+- Down: `left` and `right` must be strings. They are joined with `separator` into `from`, then both are removed. `from` already present is `AV-E020`. A missing side, or a side that is not a string, is `AV-E021`.
+- A change file that contains `field.split` fails startup with `AV-E001` until this ID has shipped on that track.
+- Done when: `"Ada Lovelace"` with separator `" "` becomes `left: Ada` and `right: Lovelace` on the way up; the way down restores one string; both sides present on the way up return `AV-E020`; a missing separator returns `AV-E021`; one conformance case passes on Node and on Spring.
+- Refuses: a regular expression, a third field, or running a handler more than once.
+
+#### CORE-32 — Field copy
+`field.copy` keeps the source field and writes the same value to a second path. `from` and `to` are B5 paths. Equality is canonical bytes (B7).
+- Up: an absent `to` is a no-op. An equal `to` is removed. A different `to` is `AV-E020` and no body. Down: an absent `to` is set from `from`. An absent `from` is a no-op. An equal `to` stays. A different `to` is `AV-E020`.
+- OpenAPI from the change date through head shows both names. Older documents show `from` only.
+- A change file that contains `field.copy` fails startup with `AV-E001` until this ID has shipped on that track.
+- Done when: the down body has both names and the same value; a different `to` on the way up returns `AV-E020` and no body; one conformance case passes on Node and on Spring.
+- Refuses: calling the network, or removing `from`.
+
+#### CORE-33 — Field join
+`field.join` turns two strings into one. The older body has `left` and `right`. The head body has `from`. `separator` is a literal string of 1 to 32 characters. An empty separator, a longer separator, or a `/pattern/` literal fails startup with `AV-E001`.
+- Up: `left` and `right` must be strings. They are joined with `separator` into `from`, then both are removed. `from` already present is `AV-E020` and no body. A missing side, or a side that is not a string, is `AV-E021` and no body.
+- Down: `from` must be a string. The split is the first occurrence of `separator`. The part before is written to `left`. The part after is written to `right`. `from` is removed. Either side already present is `AV-E020` and no body. A missing separator is `AV-E021` and no body. A non-string `from` is `AV-E016`.
+- A change file that contains `field.join` fails startup with `AV-E001` until this ID has shipped on that track.
+- Done when: `"Ada"` and `"Lovelace"` with separator `" "` become `"Ada Lovelace"` on the way up; the way down restores both fields; a present `from` on the way up returns `AV-E020`; one conformance case passes on Node and on Spring.
+- Refuses: a regular expression, a third field, or running a handler more than once.
+
+#### CORE-34 — Field list
+`field.list` turns one value into a one-element array. `from` and `to` are B5 paths. The same path fails startup with `AV-E001`.
+- Up: `from` is copied into a one-element array at `to`, then `from` is removed. `to` already present is `AV-E020` and no body. An absent `from` is a no-op.
+- Down: `to` must be an array of length 1. The only element is written to `from`, then `to` is removed. Any other length, or a `to` that is not an array, is `AV-E023` and no body. `from` already present is `AV-E020`. An absent `to` is a no-op.
+- A change file that contains `field.list` fails startup with `AV-E001` until this ID has shipped on that track.
+- Done when: `"Paris"` becomes `["Paris"]` on the way up; the way down restores `"Paris"`; an array of two returns `AV-E023`; one conformance case passes on Node and on Spring.
+- Refuses: inventing a second element, dropping extra elements, or calling the network.
+
+#### CORE-35 — Null for an absent field
+`field.null` turns an absent key into JSON `null`, and a JSON `null` back into an absent key. `path` is a B5 path.
+- Up: an absent key becomes JSON `null`. A present `null` stays `null`. Any other value stays, including `0`, `false`, and `""`.
+- Down: a JSON `null` is removed. An absent key stays absent. Any other value stays.
+- A change file that contains `field.null` fails startup with `AV-E001` until this ID has shipped on that track.
+- Done when: a missing `stars` becomes `"stars": null` on the way up; a null `stars` is absent on the way down; `0` stays `0` both ways.
+- Refuses: deleting `0`, `false`, or `""`, or calling the network.
+
+#### CORE-36 — Media type version
+The host sets `mediaType: true`, or `apiversa.media-type=true`. The option is off unless the host turns it on. After the version header is absent, the library reads a `version` parameter on the `Content-Type` value, for example `application/vnd.hotel+json;version=2026-01-15`. A bad parameter is `AV-E002`. A request that already sends the version header keeps that date.
+- Done when: a request with no header and that media type selects `2026-01-15`; a request with a header keeps the header date; the option left off ignores `Content-Type`.
+- Refuses: reading a new header name, or changing a request that already sends `Api-Version`.
+
+#### CORE-37 — Query version
+The host sets the query name. The library does not read a query parameter unless that name is set. This source runs after the header and after CORE-36. An unknown value is `AV-E002`. A header on the same request still wins.
+- Done when: `?api-version=2026-01-15` selects that date only when the host set the name `api-version`; a header on the same request keeps the header date.
+- Refuses: a built-in query name, or reading the query when the host set no name.
+
 ## C2. Types (TYPE)
 
 #### TYPE-01 — Head schemas
@@ -480,6 +559,17 @@ Every adapter must pass the shared adapter test suite (same fixtures for all fra
 `@apiversa/koa` for Koa 2 and 3.
 - Done when: the shared adapter suite passes.
 
+#### FW-07 — Lambda adapter
+`@apiversa/lambda`. `apiversaHandler(av, { request, response }, handler)` serves an API Gateway payload-format 2.0 event. The event body is upgraded, the handler runs once with the head body, and the result is downgraded into the 2.0 response. `isBase64Encoded: true` decodes the body before JSON parse. The package does not call AWS.
+- An event whose `version` is not `"2.0"`, or a base64 body that cannot be decoded, is `AV-E022`. The handler is not called.
+- Done when: an older JSON body reaches the handler as head; the caller receives the downgraded body; a 1.0 event returns `AV-E022` and does not call the handler.
+- Refuses: opening a socket, or calling the handler twice.
+
+#### FW-08 — h3 adapter
+`@apiversa/h3` wraps one h3 event handler. The body is upgraded, the handler runs once with the head body, and the result is downgraded. An unknown date is `AV-E002`. The handler is not called.
+- Done when: an older body reaches the handler as head; the caller receives the downgraded body; an unknown date does not call the handler.
+- Refuses: opening a socket, or calling the handler twice.
+
 ## C4. Documentation output (DOC)
 
 #### DOC-01 — OpenAPI per version
@@ -507,6 +597,25 @@ The head OpenAPI 3.1 document may contain a `webhooks` map. Each per-version doc
 - Done when: the order matches B9 for a two-change bundle; descriptions match the change files; head is `[]`.
 - Refuses: calling the network, or inventing a description that is not in a change file.
 
+#### DOC-08 — Snippets
+`apiversa snippets --version <date>` writes three files. `snippets/<date>/curl.txt`, `snippets/<date>/fetch.ts`, and `snippets/<date>/Example.java`. The date is the argument. The header name is `--header`, default `Api-Version`. Each file ends with one newline. For `2026-01-15` and the default header the bytes are:
+
+`curl -H "Api-Version: 2026-01-15" https://api.example.test/hotels`
+
+`await fetch("https://api.example.test/hotels", { headers: { "Api-Version": "2026-01-15" } });`
+
+`java.net.http.HttpRequest.newBuilder(java.net.URI.create("https://api.example.test/hotels")).header("Api-Version", "2026-01-15").GET().build();`
+
+Another header name replaces `Api-Version` in all three. Another date replaces `2026-01-15`. The host and path stay `https://api.example.test/hotels`. Spring `mvn apiversa:snippets` writes those same three files (CLIENT-03).
+- Done when: the three files match the template for the date and the header name; Node and Spring write the same bytes.
+- Refuses: calling the network, or writing a file outside `snippets/<date>/`.
+
+#### DOC-09 — AsyncAPI per version
+`apiversa asyncapi` reads `api-versions/asyncapi.json`. The document's `asyncapi` field must be `3.0.0`. A missing file exits 0 and writes nothing. Any other version string exits 1 with `AV-E001` and writes nothing. Spring `mvn apiversa:asyncapi` writes the same bytes.
+- Output is `asyncapi/<date>.json`, one file per bundle date. The channel list is copied from head. Message payload schemas rewind with the same rules as DOC-01 response schemas. No channel is added or dropped.
+- Done when: a `field.rename` on a payload schema shows the older name in the older file; a missing input file writes nothing and exits 0; Node and Spring write the same bytes.
+- Refuses: calling the network, or inventing a channel.
+
 ## C5. Webhooks and events (EVT)
 
 #### EVT-01 — Downgrade an outgoing event
@@ -516,12 +625,18 @@ The head OpenAPI 3.1 document may contain a `webhooks` map. Each per-version doc
 Each webhook subscriber can have its own pinned version through the resolver or pin store.
 
 #### EVT-03 — Message queues
-Same conversion for Kafka, SQS or RabbitMQ message bodies, keyed by a version header on the message. Spring Kafka first (SPR-07).
+Same conversion for Kafka, SQS or RabbitMQ message bodies, keyed by a version header on the message. Spring Kafka first (SPR-07). SQS and RabbitMQ adapters are EVT-05. They call this conversion. They do not define a second chain.
 
 #### EVT-04 — Upgrade an incoming event
 `upgradeEvent(payload, schema, version)` runs the `up` chain from that version to head, the same chain as `convertRequest`. `downgradeEvent` stays the `down` chain (EVT-01). An unknown date is `AV-E002`. An empty plan returns the original payload and does not parse it (PERF-01). A conversion failure uses the `up` codes in B11 and returns no payload. Node: `av.upgradeEvent`. Spring: `Engine.upgradeEvent`.
 - Done when: an older body becomes the head shape; the head version with an empty plan returns the same bytes; an unknown date is `AV-E002`; a failure returns no payload.
 - Refuses: calling the network, or running the `down` chain when asked to upgrade.
+
+#### EVT-05 — SQS and RabbitMQ
+Adapters for SQS and RabbitMQ. Both call the EVT-03 header-map conversion. The host supplies the client. A conversion failure returns no body.
+- Node: `@apiversa/sqs` and `@apiversa/rabbit`. Each exports `upgrade(body, headers)` and `downgrade(body, version)`. Spring: `apiversa-sqs` and `apiversa-rabbit` call `ApiversaMessages.convert`.
+- Done when: an older body becomes the head shape; an empty plan returns the same bytes; an unknown date is `AV-E002`; a failure returns no body; one conformance case covers the header map. The SQS test and the RabbitMQ test both call that case.
+- Refuses: opening a socket, or a second chain for these brokers.
 
 ## C6. Streaming (STR)
 
@@ -559,6 +674,11 @@ When `apiversa check` finds a rename, an added field or a removed field, `--sugg
 #### TEST-08 — Fuzz suite
 Seeded fuzzing of the YAML parser, the path parser, and every op: 100,000 inputs each per run. No crash, no prototype pollution, no input that takes more than 10 ms to convert at 10 KB.
 - Done when: the suite runs in CI with a fixed seed and in the HARDEN run with a new seed recorded in the result file.
+
+#### TEST-09 — Pact file
+`apiversa pact --in pact.json --out pact-result.json` and `mvn apiversa:pact` read a pact file the host already has. Each interaction has a version date. The library upgrades the request body and downgrades the response body. The result has the same interaction count. An unknown date is `AV-E002` for that interaction. Any failure exits 1 and does not leave `--out`. A missing input exits 0 and writes nothing. Spring `-Din` and `-Dout` are the same paths.
+- Done when: an older request body becomes the head shape in the result; the response body is downgraded; an unknown date does not invent a body; Node and Spring write the same bytes.
+- Refuses: calling the provider, or inventing an interaction.
 
 ## C8. Lifecycle (LIFE)
 
@@ -672,7 +792,7 @@ CORE-15 for Spring: Jakarta Bean Validation errors on an upgraded request are re
 
 #### SPR-11 — GraalVM native image
 Runtime hints so the starter works in a Spring Boot native image.
-- Done when: the example app builds and passes its tests as a native image in CI. Reflection is registered and the JVM test passed. The image was not built (D-31). The ID moves to spring 0.17.0 and stays unchecked (D-56).
+- Done when: the example app builds and passes its tests as a native image in CI. Reflection is registered and the JVM test passed. `mvn -Pnative verify` in `examples/spring-native` built the app image and the native test passed on this machine with GraalVM 21.0.12 (D-58). CI does not run that profile. Workflow files are protected, so the ID stays unchecked.
 
 #### SPR-12 — Kotlin
 Kotlin extension functions and a small DSL for `custom` converters, with null-safety annotations on the Java API.
@@ -683,6 +803,26 @@ Kotlin extension functions and a small DSL for `custom` converters, with null-sa
 #### SPR-14 — Maven plugin
 `apiversa-maven-plugin` with goals `check` (TEST-01), `changelog` (DOC-03) and `lock` (CORE-10), so Java teams get the same CI gate without Node.
 - Done when: `check` fails when the head schema changed and no change file covers the diff, and production startup reads the lock file. `check` diffs `head.json` against the newest file in `snapshots/`. A draft change file does not cover the diff. Production startup is CORE-10.
+
+#### SPR-15 — Operator tools
+Spring grows the Node tools it does not have yet. Each tool matches the Node ID. No new rule.
+- Memory pin store in `apiversa-core-java`. `apiversa-pin-redis` and `apiversa-pin-postgres` use the client the host passes. A missing store when the policy is `pin-on-first-call` is `AV-E005` at startup. This is LIFE-05 and LIFE-07.
+- `mvn apiversa:retire` matches LIFE-04. It reads `api-versions/usage.json`. It refuses a date with traffic in the last 30 days, the head date, or the only remaining date, unless `-Dforce=true`.
+- `apiversa.legacy-prefixes` matches ADOPT-01. The map is prefix to date. Resolution order matches Node: header, then resolver, then the longest prefix.
+- `mvn apiversa:eject` matches ADOPT-03. `mvn apiversa:explain` matches DBG-02. `onConvert` matches DBG-03. `mvn apiversa:doctor` matches DBG-04. `mvn apiversa:check -Dsuggest=true` matches TEST-06, and a draft still fails startup with `AV-E013`. `mvn apiversa:upgrade-guide` matches DOC-04.
+- Done when: each goal or hook above passes the same assertions as the Node ID it names; Redis and Postgres tests pass a fake client and do not connect.
+- Refuses: a new default, a new limit, or a socket opened by the library.
+
+#### SPR-16 — Spring Cloud Function
+Module `apiversa-spring-cloud-function`. The host supplies a `Function<Message<String>, Message<String>>`. The library upgrades the incoming payload, calls that function once with the head JSON, and downgrades the returned payload. The version header is the bundle header, read from the incoming message headers. The outgoing message keeps that date. The module does not depend on an AWS SDK.
+- An unknown date is `AV-E002`. The host function is not called. A conversion failure returns no payload.
+- Done when: an older payload reaches the function as head; the caller receives the downgraded payload; an unknown date does not call the function.
+- Refuses: opening a socket, or calling the function twice.
+
+#### SPR-17 — WebSocket text frame
+Module `apiversa-websocket`. The host owns the session. The library upgrades one text frame, calls the host handler once with the head JSON, and downgrades the returned text. The version header is the bundle header, read from the handshake headers the host passed. An unknown date is `AV-E002`. The handler is not called. The module does not open a socket.
+- Done when: an older body reaches the handler as head; the caller receives the downgraded body; an unknown date does not call the handler.
+- Refuses: opening a socket, or calling the handler twice.
 
 ## C13. Shared between Node and Spring (SHR)
 
@@ -705,6 +845,22 @@ A case may set `request: { method, path, query, headers, body }` instead of `inp
 - Done when: every existing route-level op (`endpoint.*`, `status.change`, `header.*`, `query.*`, `link.rewrite`) has at least one case; Node and Spring both run them.
 - Refuses: an adapter-specific case. Cases describe the request, not the framework.
 
+#### SHR-05 — Compatibility manifest
+`apiversa compat` writes `compatibility.json`. `mvn apiversa:compat` writes the same bytes. `--out` chooses the path. The default path is `compatibility.json` in the working directory.
+- The file is one JSON object. `head` is the head date. `versions` is an array, newest first. Each item has `date`, `deprecated`, `sunset`, `sunsetEnforce`, and `changes`. `sunset` is the date string or `null`. `changes` lists the change ids between that date and head, in B9 `up` order. Head's `changes` is `[]`.
+- Done when: two changes on an older date appear in B9 order; head's list is empty; Node and Spring write the same bytes.
+- Refuses: calling the network, or a change id that is not in a change file.
+
+#### SHR-06 — Client byte check
+`apiversa clients --check` and `mvn apiversa:clients -Dapiversa.check=true` generate the CLIENT-05 Python file and the CLIENT-06 Go file in memory and compare them to the fixture bytes. A difference exits 1 and writes nothing. A match exits 0 and writes nothing.
+- Done when: the shared fixture passes on Node and on Spring.
+- Refuses: writing a file, or calling the network.
+
+#### SHR-07 — Bundle diff
+`apiversa bundle-diff --left dir --right dir --out bundle-diff.json` and `mvn apiversa:bundle-diff` write one JSON object. `-Dleft`, `-Dright`, and `-Dout` are the same paths. `onlyLeft` and `onlyRight` are dates, newest first. `changed` lists change-file names whose bytes differ, in file-name order. A directory that fails to load exits 1 with `AV-E001` and does not leave `--out`.
+- Done when: a date that exists on only one side is listed; a renamed change file is listed under `changed`; Node and Spring write the same bytes.
+- Refuses: calling the network, or copying either directory.
+
 ## C14. Client (CLIENT)
 
 #### CLIENT-01 — Typed client
@@ -712,6 +868,23 @@ A case may set `request: { method, path, query, headers, body }` instead of `inp
 
 #### CLIENT-02 — React hook
 `@apiversa/react`: `useApiVersion()` and a provider. Thin layer over CLIENT-01.
+
+#### CLIENT-03 — Java client
+`apiversa-client`. The host passes `java.net.http.HttpClient` and the pinned date. `get(date, path, recordClass)` sends the bundle header with that date and reads the body into the record. `apiversa-client-kotlin` calls the same method: `get<Hotel_2026_01_15>(date, path)`. It does not generate a second set of records.
+- `mvn apiversa:generate-client` writes one record per schema per date. The record name is the schema name plus `_` and the date with `-` replaced by `_` (`Hotel_2026_01_15`). Components follow registry order. A nested schema is a nested record. A safe integer is `long`. Any other JSON number is `double`. A string is `String`. A boolean is `Boolean`. Package default is `apiversa.client.generated`.
+- `mvn apiversa:snippets` writes the three DOC-08 files. The bytes match `apiversa snippets` for the same date and header name.
+- Done when: a request to the local stub carries the pinned date; the record fields match the schema for that date; the Kotlin call hits the Java method; the snippet bytes match Node.
+- Refuses: building an `HttpClient` inside the library, or calling a host other than the one the stub or the host set.
+
+#### CLIENT-05 — Python client files
+`apiversa generate-client --lang python` and `mvn apiversa:generate-client -Dapiversa.lang=python` write `generated/<Schema>_<date>.py`. Dashes in the date become underscores. A string is `str`. A boolean is `bool`. An integer is `int`. Any other number is `float`. Anything else is `str`. A `field.list` field is `list`. A nested schema is a nested class name. Field rewind matches CLIENT-03, including `field.join`, `field.list`, and `field.null`. The Java record goal stays the default when the language is omitted.
+- Done when: the older date shows the older field name; the head date shows the head field name; Node and Spring write the same file bytes.
+- Refuses: calling pip, or calling the network.
+
+#### CLIENT-06 — Go client files
+`apiversa generate-client --lang go` and `mvn apiversa:generate-client -Dapiversa.lang=go` write `generated/<schema>_<date>.go`. A string is `string`. A boolean is `bool`. An integer is `int64`. Any other number is `float64`. A `field.list` field is a slice. Each field has a `json` tag in registry order. Field rewind matches CLIENT-05.
+- Done when: the same fixture writes the same Go file on Node and on Spring.
+- Refuses: calling the `go` tool, or calling the network.
 
 ## C15. Observability (OBS)
 
@@ -722,6 +895,23 @@ A case may set `request: { method, path, query, headers, body }` instead of `inp
 LIFE-02's snapshot gains `unpinned`, a count per version of requests whose date came from the `default` policy. An explicit version header does not increment it. A resolver pin does not increment it. Prometheus text adds `apiversa_unpinned_total{version="..."}`. Spring adds a Micrometer meter `apiversa.unpinned` tagged with `version`, and the actuator report includes the same counts. The library still does not send them.
 - Done when: a default-policy request increments `unpinned` for that date; an explicit header does not; a resolver pin does not; `stats()` and the actuator report show the count.
 - Refuses: opening a socket, or counting a request that sent the version header.
+
+## C16. Gateway (GW)
+
+#### GW-01 — Node gateway
+`@apiversa/gateway`. `createGateway({ apiversa, upstream, fetch, bundle })` upgrades the request, calls `fetch` with the head body and the upstream URL the host set, then downgrades the response. `fetch` is the host's function. `bundle` selects a CORE-28 bundle. The default bundle is `default`.
+- Done when: the fake `fetch` receives the head shape; the caller receives the downgraded response; an unknown date is `AV-E002` and `fetch` is not called.
+- Refuses: calling a local handler, calling `legacyHandler`, or calling an URL the host did not set.
+
+#### GW-02 — Spring gateway
+Module `apiversa-gateway`. A servlet `Filter` on MVC and a `WebFilter` on WebFlux. The host passes the upstream URL and the HTTP client. The filter upgrades the request and downgrades the response. Output bytes for the same change files match GW-01. `apiversa.gateway.bundle` selects a CORE-28 bundle. The default bundle is `default`.
+- Done when: the fake client receives the head shape; the caller receives the downgraded response; the bytes match GW-01 for the same fixture.
+- Refuses: calling a controller, calling `legacyHandler`, or calling an URL the host did not set.
+
+#### GW-03 — Upstream per bundle
+The host passes a map of bundle name to URL, plus the same `fetch` or `Upstream` it passes for GW-01 and GW-02. The gateway calls the URL for that bundle once. An unknown bundle name is `AV-E001` and `fetch` is not called. An unknown date is `AV-E002` and `fetch` is not called. The body is still upgraded and downgraded.
+- Done when: bundle `billing` is sent to the billing URL; the request body is the head shape; the caller receives the downgraded body; Node and Spring write the same fixture bytes.
+- Refuses: calling a URL the host did not put in the map, or calling `fetch` twice.
 
 ---
 
@@ -745,6 +935,11 @@ LIFE-02's snapshot gains `unpinned`, a count per version of requests whose date 
 | `@apiversa/otel` | OpenTelemetry spans |
 | `@apiversa/client` | Client side |
 | `@apiversa/react` | React client |
+| `@apiversa/sqs` | SQS message conversion (EVT-05) |
+| `@apiversa/rabbit` | RabbitMQ message conversion (EVT-05) |
+| `@apiversa/gateway` | Gateway (GW-01). The host supplies `fetch` |
+| `@apiversa/lambda` | API Gateway payload format 2.0 (FW-07) |
+| `@apiversa/h3` | h3 event handler (FW-08) |
 
 Core has zero runtime dependencies. The YAML parser is a small, vendored, safe subset (no anchors, no tags, no custom types) inside core.
 
@@ -781,7 +976,7 @@ app.post('/bookings', av.route({ body: 'BookingInput', response: 'Booking' }), c
 
 ## D4. CLI
 
-`apiversa init | lock | doctor | generate | check | test | openapi | changelog | eject | explain | retire | replay | diff | matrix | upgrade-guide`
+`apiversa init | lock | doctor | generate | check | test | openapi | changelog | eject | explain | retire | replay | diff | matrix | upgrade-guide | snippets | rewrite | asyncapi | compat | generate-client | clients | pact | bundle-diff`
 
 ---
 
@@ -802,6 +997,15 @@ app.post('/bookings', av.route({ body: 'BookingInput', response: 'Booking' }), c
 | `apiversa-kotlin` | Kotlin extensions |
 | `apiversa-maven-plugin` | Maven goals |
 | `apiversa-test` | JUnit 5 and MockMvc helpers |
+| `apiversa-sqs` | SQS. Calls `ApiversaMessages.convert` (EVT-05) |
+| `apiversa-rabbit` | RabbitMQ. Calls `ApiversaMessages.convert` (EVT-05) |
+| `apiversa-pin-redis` | Redis pin store. The host supplies the client (SPR-15) |
+| `apiversa-pin-postgres` | Postgres pin store. The host supplies the client (SPR-15) |
+| `apiversa-gateway` | Gateway filter (GW-02) |
+| `apiversa-client` | Java client (CLIENT-03) |
+| `apiversa-client-kotlin` | Kotlin wrapper over `apiversa-client` (CLIENT-03) |
+| `apiversa-spring-cloud-function` | Spring Cloud Function wrapper (SPR-16) |
+| `apiversa-websocket` | WebSocket text frame (SPR-17) |
 
 ## E2. Configuration
 
@@ -859,18 +1063,24 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 | `AV-E005` | startup | pin-on-first-call requires a pin store. |
 | `AV-E006` | startup | A locked change file was modified. |
 | `AV-E007` | 500 | Converter mutated its input. |
-| `AV-E008` | 413 | Body is larger than the limit. |
+| `AV-E008` | 413 on the way up and on the way down | Body is larger than the limit. |
 | `AV-E009` | 413 | Array is larger than the limit. |
 | `AV-E010` | 404 | Endpoint does not exist in this version. |
 | `AV-E011` | 410 | Endpoint has been removed. |
-| `AV-E012` | 410 | Version is older than the oldest supported version. |
+| `AV-E012` | 410 | Version is older than the oldest supported version or past its sunset. |
 | `AV-E013` | startup | A draft change file is present. |
 | `AV-E014` | 400 on the way up, 500 on the way down | JSON number cannot be encoded. |
 | `AV-E015` | 400 on the way up, 500 on the way down | Duplicate JSON key. |
 | `AV-E016` | 400 on the way up, 500 on the way down | Expression could not be read. |
 | `AV-E017` | 400 | Parameter target is already set. |
+| `AV-E018` | 400 on the way up | Both alias names are present. |
+| `AV-E019` | cli, exit 1 | Rewrite input is larger than the limit. |
+| `AV-E020` | 400 on the way up, 500 on the way down | Target is already set. |
+| `AV-E021` | 400 on the way up, 500 on the way down | Separator was not found. |
+| `AV-E022` | 400 | Lambda event could not be read. |
+| `AV-E023` | 400 on the way up, 500 on the way down | List length is not 1. |
 
-`supportedVersions` is present on every HTTP error and lists the bundle dates, newest first. `AV-E012` also sends the Sunset link required by CORE-02. `AV-E002` carries the supported dates in `supportedVersions`, not in `message`.
+`supportedVersions` is present on every HTTP error and lists the bundle dates, newest first. `AV-E012` also sends the Sunset link required by CORE-02. The same code and the same message cover a date older than the oldest version and a `sunsetEnforce` rejection of a date that stays in `supportedVersions`. `AV-E002` carries the supported dates in `supportedVersions`, not in `message`.
 
 ## F4. Security
 
@@ -880,7 +1090,7 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 - Integers outside ±(2^53−1), and non-finite numbers, are rejected (AV-E014).
 - A failed conversion does not call the handler and does not send a partial body (B11).
 - YAML subset with no anchors, aliases, or tags (avoids billion-laughs and type confusion).
-- No network calls from any package except the pin-store adapters the host configures.
+- No network calls from any package except the pin-store adapters, the SQS and RabbitMQ adapters, and the gateway packages. Those call only the client or `fetch` the host passed. The gateway calls only the upstream URL the host set, or the URL the host mapped to that bundle name (GW-03).
 
 ---
 
@@ -888,7 +1098,7 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
 
 - GraphQL versioning. GraphQL evolves schemas differently.
 - Automatic change files from a diff. Only drafts (TEST-06); a person or the agent reviews them.
-- A proxy or gateway mode in core. Maybe a separate package after 1.0.
+- A proxy or gateway mode in core. The gateway is `@apiversa/gateway` (GW-01, GW-03) and `apiversa-gateway` (GW-02, GW-03). Core still does not proxy.
 - A hosted dashboard. A possible paid product later, outside these packages.
 - Telemetry or phone-home of any kind.
 - AI inside the runtime.
@@ -923,9 +1133,9 @@ A missed budget is recorded with its real number in `docs/BENCHMARKS.md`. The bu
    - no open hard stop and no red run on `next` in the last 24 hours.
 9. **First release.** The first published version of each track contains every ID that passes at that commit. `docs/VERSION-HISTORY.md` lists all of them, not only that version's section. Later versions list only their own section.
 
-## H1. Node track (23 versions)
+## H1. Node track (31 versions)
 
-Each version has one theme. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar. `[x]` after an ID means that ID is implemented and its tests passed. It does not mean the package is published.
+Each version has one theme. Node 1.1.0 and node 1.2.0 are the first minors after the freeze. A 1.x minor adds an export, an option, an op, an error code, or a package. It does not change a default, a limit, or a conformance byte. Node 0.1.0 is the large starter release and is built together with spring 0.1.0 when the owner asks for 0.1.0. Later versions are focused so each can meet the H0 rule 8 bar quickly. In launch mode (first 28 days, up to one stable release a day when the bar is met) several small versions can ship in the first month; after that, one a week. The release bar decides the pace, not the calendar. `[x]` after an ID means that ID is implemented and its tests passed. It does not mean the package is published.
 
 ### node 0.1.0
 Theme: usable core on Express and Fastify.
@@ -1082,9 +1292,56 @@ Theme: finish the Nest adapter.
 ### node 1.0.0
 - API freeze per `docs/STABILITY.md`. No new IDs. Requires at least one production user named in `docs/DECISIONS.md` with their consent. Major release: the agent prepares it and stops.
 
-## H2. Spring track (17 versions)
+### node 1.1.0
+Theme: queues other than Kafka, and two bundles in one process.
+- **EVT-05** SQS and RabbitMQ — Evidence: eval:docs/evals/evt-05.md
+- **CORE-28** Named bundles — Evidence: eval:docs/evals/core-28.md
 
-Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite. Spring 0.10.0 through 0.15.0 are the same IDs as node 0.16.0 through 0.21.0.
+### node 1.2.0
+Theme: accept both field names, then add the gateway and the snippets.
+- **CORE-29** Field alias — Evidence: eval:docs/evals/core-29.md
+- **GW-01** Node gateway — Evidence: eval:docs/evals/gw-01.md
+- **DOC-08** Snippets — Evidence: eval:docs/evals/doc-08.md
+
+### node 1.3.0
+Theme: rewrite stored JSONL, split one string into two fields, and enter through Lambda.
+- **CORE-30** Rewrite a JSONL file — Evidence: eval:docs/evals/core-30.md
+- **CORE-31** Field split — Evidence: eval:docs/evals/core-31.md
+- **FW-07** Lambda adapter — Evidence: eval:docs/evals/fw-07.md
+
+### node 1.4.0
+Theme: copy a field, publish AsyncAPI per version, and write the compatibility manifest.
+- **CORE-32** Field copy — Evidence: eval:docs/evals/core-32.md
+- **DOC-09** AsyncAPI per version — Evidence: eval:docs/evals/doc-09.md
+- **SHR-05** Compatibility manifest — Evidence: eval:docs/evals/shr-05.md
+
+### node 1.5.0
+Theme: join two strings, wrap one value in a list, and turn an absent key into null.
+- **CORE-33** Field join — Evidence: eval:docs/evals/core-33.md
+- **CORE-34** Field list — Evidence: eval:docs/evals/core-34.md
+- **CORE-35** Null for an absent field — Evidence: eval:docs/evals/core-35.md
+
+### node 1.6.0
+Theme: write Python and Go client files, and check those bytes.
+- **CLIENT-05** Python client files — Evidence: eval:docs/evals/client-05.md
+- **CLIENT-06** Go client files — Evidence: eval:docs/evals/client-06.md
+- **SHR-06** Client byte check — Evidence: eval:docs/evals/shr-06.md
+
+### node 1.7.0
+Theme: check a pact file, diff two bundles, and send each bundle to its own upstream.
+- **TEST-09** Pact file — Evidence: eval:docs/evals/test-09.md
+- **SHR-07** Bundle diff — Evidence: eval:docs/evals/shr-07.md
+- **GW-03** Upstream per bundle — Evidence: eval:docs/evals/gw-03.md
+
+### node 1.8.0
+Theme: read the date from the media type or the query, and enter through h3.
+- **CORE-36** Media type version — Evidence: eval:docs/evals/core-36.md
+- **CORE-37** Query version — Evidence: eval:docs/evals/core-37.md
+- **FW-08** h3 adapter — Evidence: eval:docs/evals/fw-08.md
+
+## H2. Spring track (26 versions)
+
+Spring 0.1.0 is part of the same 0.1.0 request as node 0.1.0. It is not a later project. Spring IDs that share a name with a Node ID (`CORE-08`, `EVT-01`, …) mean the same behavior, proven by the conformance suite. Spring 0.10.0 through 0.15.0 are the same IDs as node 0.16.0 through 0.21.0. Spring 1.1.0 carries the same shared IDs as node 1.1.0, plus SPR-15. Spring 1.2.0 carries CORE-29 with node 1.2.0, plus the gateway filter and the Java client. Spring 1.3.0 carries CORE-30 and CORE-31 with node 1.3.0, plus SPR-16. Spring 1.4.0 carries the same IDs as node 1.4.0. Spring 1.5.0 carries CORE-33, CORE-34, and CORE-35 with node 1.5.0. Spring 1.6.0 carries CLIENT-05, CLIENT-06, and SHR-06 with node 1.6.0. Spring 1.7.0 carries TEST-09, SHR-07, and GW-03 with node 1.7.0. Spring 1.8.0 carries CORE-36 and CORE-37 with node 1.8.0, plus SPR-17.
 
 ### spring 0.1.0
 Theme: usable core on Spring MVC, with docs and the CI gate. Same behavior as node 0.1.0. FW-01 and FW-02 are SPR-01 and SPR-04. TYPE-01's ordered fields are the schema registry. TEST-05's helpers are SPR-09.
@@ -1123,14 +1380,14 @@ Theme: correct errors and webhooks.
 - **SPR-10** [x] Bean Validation errors — Evidence: safety
 - **EVT-01** [x] Downgrade an outgoing event — Evidence: stripe
 - **EVT-02** [x] Subscriber pins — Evidence: stripe
-  Depends on SPR-15 (spring 0.17.0).
+  Depends on SPR-15 (spring 1.1.0).
 
 ### spring 0.4.0
 Theme: lifecycle.
 - **LIFE-01** [x] Deprecation and Sunset headers — Evidence: rfc
 - **LIFE-03** [x] Safe-to-remove report — Evidence: adoption
 - **LIFE-06** [x] Pin upgrade with preview — Evidence: stripe
-  Depends on SPR-15 (spring 0.17.0).
+  Depends on SPR-15 (spring 1.1.0).
 
 ### spring 0.5.0
 Theme: reactive.
@@ -1205,3 +1462,51 @@ Theme: native image.
 
 ### spring 1.0.0
 - API freeze. Same rule as node 1.0.0. Major release: the agent prepares it and stops.
+
+### spring 1.1.0
+Theme: same queues and bundles as node 1.1.0, plus the operator tools Node already ships.
+- **EVT-05** SQS and RabbitMQ — Evidence: eval:docs/evals/evt-05.md
+- **CORE-28** Named bundles — Evidence: eval:docs/evals/core-28.md
+- **SPR-15** Operator tools — Evidence: eval:docs/evals/spr-15.md
+
+### spring 1.2.0
+Theme: same field alias as node 1.2.0, plus the gateway filter and the Java client.
+- **CORE-29** Field alias — Evidence: eval:docs/evals/core-29.md
+- **GW-02** Spring gateway — Evidence: eval:docs/evals/gw-02.md
+- **CLIENT-03** Java client — Evidence: eval:docs/evals/client-03.md
+
+### spring 1.3.0
+Theme: same rewrite and field split as node 1.3.0, plus Spring Cloud Function.
+- **CORE-30** Rewrite a JSONL file — Evidence: eval:docs/evals/core-30.md
+- **CORE-31** Field split — Evidence: eval:docs/evals/core-31.md
+- **SPR-16** Spring Cloud Function — Evidence: eval:docs/evals/spr-16.md
+
+### spring 1.4.0
+Theme: same field copy, AsyncAPI, and compatibility manifest as node 1.4.0.
+- **CORE-32** Field copy — Evidence: eval:docs/evals/core-32.md
+- **DOC-09** AsyncAPI per version — Evidence: eval:docs/evals/doc-09.md
+- **SHR-05** Compatibility manifest — Evidence: eval:docs/evals/shr-05.md
+
+### spring 1.5.0
+Theme: same field join, field list, and null-for-absent as node 1.5.0.
+- **CORE-33** Field join — Evidence: eval:docs/evals/core-33.md
+- **CORE-34** Field list — Evidence: eval:docs/evals/core-34.md
+- **CORE-35** Null for an absent field — Evidence: eval:docs/evals/core-35.md
+
+### spring 1.6.0
+Theme: same Python files, Go files, and client byte check as node 1.6.0.
+- **CLIENT-05** Python client files — Evidence: eval:docs/evals/client-05.md
+- **CLIENT-06** Go client files — Evidence: eval:docs/evals/client-06.md
+- **SHR-06** Client byte check — Evidence: eval:docs/evals/shr-06.md
+
+### spring 1.7.0
+Theme: same pact check, bundle diff, and per-bundle upstream as node 1.7.0.
+- **TEST-09** Pact file — Evidence: eval:docs/evals/test-09.md
+- **SHR-07** Bundle diff — Evidence: eval:docs/evals/shr-07.md
+- **GW-03** Upstream per bundle — Evidence: eval:docs/evals/gw-03.md
+
+### spring 1.8.0
+Theme: same media type and query date as node 1.8.0, plus a WebSocket text frame.
+- **CORE-36** Media type version — Evidence: eval:docs/evals/core-36.md
+- **CORE-37** Query version — Evidence: eval:docs/evals/core-37.md
+- **SPR-17** WebSocket text frame — Evidence: eval:docs/evals/spr-17.md

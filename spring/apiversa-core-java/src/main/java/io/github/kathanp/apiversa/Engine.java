@@ -536,15 +536,92 @@ public final class Engine {
     }
 
     public static Decision resolveDecision(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId, @Nullable String path, @Nullable Map<String, String> legacyPrefixes) {
+        return resolveDecision(bundle, headers, headerName, resolved, clientId, path, legacyPrefixes, false, null, null);
+    }
+
+    /** Header, then a Content-Type version parameter when the host turned that on, then the host's query name, then the resolver and prefixes. */
+    public static Decision resolveDecision(Bundle bundle, Map<String, List<String>> headers, @Nullable String headerName, @Nullable String resolved, @Nullable String clientId, @Nullable String path, @Nullable Map<String, String> legacyPrefixes, boolean mediaType, @Nullable String queryName, @Nullable String query) {
         String name = headerName == null || headerName.isBlank() ? "Api-Version" : headerName;
         List<String> values = readHeader(headers, name);
         List<String> distinct = values.stream().distinct().toList();
         if (distinct.size() > 1) throw ApiversaException.fail("AV-E002", "up", bundle.dates);
         if (!distinct.isEmpty()) return new Decision(classify(bundle, distinct.get(0), name), "header");
+        if (mediaType) {
+            String media = mediaVersion(headers);
+            if (media != null) return new Decision(classify(bundle, media, name), "media");
+        }
+        if (queryName != null && !queryName.isBlank()) {
+            String text = query;
+            if ((text == null || text.isBlank()) && path != null) {
+                int mark = path.indexOf('?');
+                if (mark >= 0) text = path.substring(mark + 1);
+            }
+            String fromQuery = queryParameter(text, queryName);
+            if (fromQuery != null) return new Decision(classify(bundle, fromQuery, name), "query");
+        }
         if (resolved != null && !resolved.isEmpty()) return new Decision(classify(bundle, resolved, name), "resolver");
         String fromPrefix = prefixVersion(path, legacyPrefixes);
         if (fromPrefix != null) return new Decision(classify(bundle, fromPrefix, name), "prefix");
         return applyDefault(bundle, clientId, name);
+    }
+
+    private static String mediaVersion(Map<String, List<String>> headers) {
+        List<String> values = readHeader(headers, "content-type");
+        String found = null;
+        for (String value : values) {
+            int semi = value.indexOf(';');
+            if (semi < 0) continue;
+            int start = semi + 1;
+            while (start <= value.length()) {
+                int next = value.indexOf(';', start);
+                int end = next < 0 ? value.length() : next;
+                String part = value.substring(start, end).trim();
+                int eq = part.indexOf('=');
+                if (eq > 0 && part.substring(0, eq).trim().equalsIgnoreCase("version")) {
+                    String parameter = unquote(part.substring(eq + 1).trim());
+                    if (found != null && !found.equals(parameter)) return "";
+                    found = parameter;
+                }
+                if (next < 0) break;
+                start = next + 1;
+            }
+        }
+        return found;
+    }
+
+    private static String queryParameter(String query, String name) {
+        if (query == null || query.isBlank() || name == null || name.isBlank()) return null;
+        String text = query.startsWith("?") ? query.substring(1) : query;
+        String found = null;
+        int start = 0;
+        while (start <= text.length()) {
+            int next = text.indexOf('&', start);
+            int end = next < 0 ? text.length() : next;
+            String pair = text.substring(start, end);
+            int eq = pair.indexOf('=');
+            String key = decode(eq < 0 ? pair : pair.substring(0, eq));
+            if (key.equals(name)) {
+                String value = eq < 0 ? "" : decode(pair.substring(eq + 1));
+                if (found != null && !found.equals(value)) return "";
+                found = value;
+            }
+            if (next < 0) break;
+            start = next + 1;
+        }
+        return found;
+    }
+
+    private static String unquote(String value) {
+        if (value.length() >= 2 && ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))) return value.substring(1, value.length() - 1);
+        return value;
+    }
+
+    private static String decode(String value) {
+        try {
+            return java.net.URLDecoder.decode(value.replace("+", " "), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException exception) {
+            return value;
+        }
     }
 
     /** Longest prefix wins. A prefix matches the path or a path under it. */

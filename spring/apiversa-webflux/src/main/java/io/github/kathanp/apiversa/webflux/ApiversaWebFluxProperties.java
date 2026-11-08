@@ -1,6 +1,8 @@
 package io.github.kathanp.apiversa.webflux;
 
 import io.github.kathanp.apiversa.Json;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.core.env.Environment;
 
@@ -15,6 +17,9 @@ public class ApiversaWebFluxProperties {
     private String oversize = "error";
     private int maxBodyBytes = Json.MAX_BODY_BYTES;
     private int maxArrayItems = Json.MAX_ARRAY_ITEMS;
+    private Map<String, String> legacyPrefixes = new LinkedHashMap<>();
+    private boolean mediaType;
+    private String queryVersion = "";
 
     public String getDir() {
         return dir;
@@ -83,5 +88,29 @@ public class ApiversaWebFluxProperties {
 
     public void setMaxArrayItems(int maxArrayItems) {
         this.maxArrayItems = maxArrayItems;
+    }
+
+    public Map<String, String> getLegacyPrefixes() {
+        return legacyPrefixes;
+    }
+
+    public void setLegacyPrefixes(Map<String, String> legacyPrefixes) {
+        this.legacyPrefixes = legacyPrefixes == null ? new LinkedHashMap<>() : legacyPrefixes;
+    }
+
+    public boolean isMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(boolean mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getQueryVersion() {
+        return queryVersion;
+    }
+
+    public void setQueryVersion(String queryVersion) {
+        this.queryVersion = queryVersion == null ? "" : queryVersion;
     }
 }
