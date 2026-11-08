@@ -15,6 +15,7 @@ import { fieldRemove } from './fieldRemove.js';
 import { fieldAlias } from './fieldAlias.js';
 import { fieldCopy } from './fieldCopy.js';
 import { fieldJoin } from './fieldJoin.js';
+import { fieldList } from './fieldList.js';
 import { fieldSplit } from './fieldSplit.js';
 import { fieldRename } from './fieldRename.js';
 import { fieldType } from './fieldType.js';
@@ -85,6 +86,9 @@ function applyOnObject(obj: JObject, schema: string | undefined, op: RawOp, ctx:
       return obj;
     case 'field.join':
       fieldJoin(obj, op, ctx.when);
+      return obj;
+    case 'field.list':
+      fieldList(obj, op, ctx.when);
       return obj;
     case 'field.copy':
       fieldCopy(obj, op, ctx.when);

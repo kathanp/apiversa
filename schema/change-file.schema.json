@@ -256,6 +256,31 @@
         {
           "properties": {
             "op": {
+              "const": "field.list"
+            },
+            "schema": {
+              "$ref": "#/$defs/name"
+            },
+            "from": {
+              "$ref": "#/$defs/path"
+            },
+            "to": {
+              "$ref": "#/$defs/path"
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            }
+          },
+          "required": [
+            "schema",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": {
               "const": "field.copy"
             },
             "schema": {

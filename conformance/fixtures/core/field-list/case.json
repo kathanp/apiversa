@@ -1,0 +1,8 @@
+{
+  "schema": "Hotel",
+  "fields": ["cities"],
+  "direction": "up",
+  "version": "2026-01-15",
+  "input": { "city": "Paris" },
+  "expected": { "cities": ["Paris"] }
+}

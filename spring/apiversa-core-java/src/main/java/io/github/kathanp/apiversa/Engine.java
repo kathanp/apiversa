@@ -135,6 +135,7 @@ public final class Engine {
                 if ("link.rewrite".equals(opName) && (String.valueOf(op.get("from")) + String.valueOf(op.get("to"))).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
                 if (("endpoint.method".equals(opName) || "param.move".equals(opName) || "endpoint.deprecate".equals(opName) || "response.envelope".equals(opName)) && String.valueOf(op.get("path")).contains("{")) throw ApiversaException.fail("AV-E001", "startup");
                 if ("field.split".equals(opName) || "field.join".equals(opName)) checkSeparator(op.get("separator"));
+                if ("field.list".equals(opName) && String.valueOf(op.get("from")).equals(String.valueOf(op.get("to")))) throw ApiversaException.fail("AV-E001", "startup");
                 checkScope(op);
                 ops.add(op);
             }
@@ -830,6 +831,7 @@ public final class Engine {
             case "field.alias" -> alias(obj, text(op, "from"), text(op, "to"), direction);
             case "field.split" -> split(obj, text(op, "from"), text(op, "left"), text(op, "right"), text(op, "separator"), direction);
             case "field.join" -> join(obj, text(op, "from"), text(op, "left"), text(op, "right"), text(op, "separator"), direction);
+            case "field.list" -> list(obj, text(op, "from"), text(op, "to"), direction);
             case "field.copy" -> copy(obj, text(op, "from"), text(op, "to"), direction);
             case "field.add" -> add(obj, text(op, "path"), op.get("default"), direction);
             case "field.remove" -> remove(obj, text(op, "path"), op.get("default"), direction);
@@ -1015,6 +1017,38 @@ public final class Engine {
         if (end <= 0) return false;
         for (int i = end + 1; i < value.length(); i++) if ("gimsuy".indexOf(value.charAt(i)) < 0) return false;
         return true;
+    }
+
+    /** Up wraps `from` in a one-element array. Down unwraps that array. */
+    private static void list(Obj root, String from, String to, String when) {
+        if (from.equals(to)) throw ApiversaException.fail("AV-E001", "startup");
+        List<Leaf> fromLeaves = leaves(root, from, when);
+        List<Leaf> toLeaves = leaves(root, to, when);
+        int count = Math.max(fromLeaves.size(), toLeaves.size());
+        for (int i = 0; i < count; i++) {
+            if ("up".equals(when)) listUp(fromLeaves, toLeaves, i, when);
+            else listDown(fromLeaves, toLeaves, i, when);
+        }
+    }
+
+    private static void listUp(List<Leaf> fromLeaves, List<Leaf> toLeaves, int index, String when) {
+        if (present(toLeaves, index)) throw ApiversaException.fail("AV-E020", when);
+        if (!present(fromLeaves, index)) return;
+        if (index >= toLeaves.size()) throw ApiversaException.fail("AV-E016", when);
+        Json.Arr array = new Json.Arr();
+        array.items.add(Json.clone(read(fromLeaves.get(index))));
+        toLeaves.get(index).parent.set(toLeaves.get(index).key, array);
+        fromLeaves.get(index).parent.remove(fromLeaves.get(index).key);
+    }
+
+    private static void listDown(List<Leaf> fromLeaves, List<Leaf> toLeaves, int index, String when) {
+        if (!present(toLeaves, index)) return;
+        if (present(fromLeaves, index)) throw ApiversaException.fail("AV-E020", when);
+        V value = read(toLeaves.get(index));
+        if (!(value instanceof Json.Arr array) || array.items.size() != 1) throw ApiversaException.fail("AV-E023", when);
+        if (index >= fromLeaves.size()) throw ApiversaException.fail("AV-E016", when);
+        fromLeaves.get(index).parent.set(fromLeaves.get(index).key, Json.clone(array.items.get(0)));
+        toLeaves.get(index).parent.remove(toLeaves.get(index).key);
     }
 
     /** Up joins the two sides. Down splits on the first literal separator. */
