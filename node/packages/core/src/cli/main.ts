@@ -19,7 +19,9 @@ import { retire } from './retire.js';
 import { typeDiff } from './typeDiff.js';
 import { writeAsyncApi } from './asyncapi.js';
 import { clientsMatch, writeClientFiles, type ClientLang } from './clients.js';
+import { writeBundleDiff } from './bundleDiff.js';
 import { writeCompat } from './compat.js';
+import { writePact } from './pact.js';
 import { rewriteFailure, rewriteJsonl } from './rewrite.js';
 import { writeSnippets } from './snippets.js';
 import { upgradeGuide } from './upgradeGuide.js';
@@ -215,6 +217,35 @@ export function runCli(argv: string[], cwd = process.cwd()): number {
   }
   if (command === 'compat') {
     process.stdout.write(`wrote ${writeCompat(dir, flag(rest, '--out'), undefined, cwd)}\n`);
+    return 0;
+  }
+  if (command === 'pact') {
+    const input = flag(rest, '--in');
+    const out = flag(rest, '--out');
+    if (!input || !out) {
+      process.stderr.write('usage: apiversa pact --in pact.json --out pact-result.json [api-versions]\n');
+      return 1;
+    }
+    const result = writePact(dir, input, out);
+    if (!result.ok) {
+      process.stderr.write(`${result.code}\n`);
+      return 1;
+    }
+    return 0;
+  }
+  if (command === 'bundle-diff') {
+    const left = flag(rest, '--left');
+    const right = flag(rest, '--right');
+    const out = flag(rest, '--out');
+    if (!left || !right || !out) {
+      process.stderr.write('usage: apiversa bundle-diff --left dir --right dir --out bundle-diff.json\n');
+      return 1;
+    }
+    const result = writeBundleDiff(left, right, out);
+    if (!result.ok) {
+      process.stderr.write(`${result.code}\n`);
+      return 1;
+    }
     return 0;
   }
   if (command === 'upgrade-guide') {

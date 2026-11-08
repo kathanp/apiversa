@@ -5,12 +5,14 @@ One section per track and version, newest version first. Node and Spring are int
 ## spring 1.7.0 (unreleased)
 
 - SHR-07 Bundle diff
-- Migration: none. `mvn apiversa:bundle-diff` writes one JSON file and does not copy either directory.
+- TEST-09 Pact file
+- Migration: none. `mvn apiversa:bundle-diff` writes one JSON file and does not copy either directory. `mvn apiversa:pact` writes nothing when the input is missing.
 
 ## node 1.7.0 (unreleased)
 
 - SHR-07 Bundle diff
-- Migration: none. `apiversa bundle-diff` writes one JSON file and does not copy either directory.
+- TEST-09 Pact file
+- Migration: none. `apiversa bundle-diff` writes one JSON file and does not copy either directory. `apiversa pact` writes nothing when the input is missing.
 
 ## spring 1.6.0 (unreleased)
 
